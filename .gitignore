@@ -1,0 +1,40 @@
+# ==============================================================================
+# AQUASHIELD CONTROL CONGELADO - GITIGNORE OFICIAL
+# ==============================================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+venv/
+env/
+.env
+
+# Archivos temporales de Microsoft Office
+~$*.xlsx
+~$*.xlsm
+~$*.docx
+*.tmp
+
+# Planillas raw de datos transaccionales locales (se procesan localmente para generar data_control_congelado.js)
+Control Congelado Comex 2026*.xlsx
+Exportaciones gestion Pedidos de Vta.xlsx
+Dashboard Comex 2026.xlsx
+flujo v1.xlsx
+flujo v2.xlsx
+pedidos_sql.xlsx
+vf05n.xlsx
+
+# Backups y temporales
+*.bak*
+*.log
+scratch/
+scratch_*.py
+
+# Editores y SO
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+.DS_Store

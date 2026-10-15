@@ -1,0 +1,134 @@
+{
+  "_meta": {
+    "version": "1.1",
+    "descripcion": "Matriz de Reglas de Negocio COMEX personalizadas por cliente para AquaShield Control Congelado",
+    "formatos_liberacion_disponibles": [
+      "SWB",
+      "Telex Release",
+      "OBL",
+      "Liberación en Destino"
+    ]
+  },
+  "reglas": [
+    {
+      "cliente_patron": "ANDES ASIA",
+      "nombre_oficial": "Andes Asia, Inc.",
+      "codigo_sap": "200000018",
+      "categoria": "Intercompany",
+      "analista_titular": "Andreina",
+      "condicion_venta": "Crédito",
+      "formato_liberacion": "SWB",
+      "requiere_dhl": false,
+      "criterio_cierre": "co_aprobado",
+      "notas": "Filial AquaChile en Asia. Liberación electrónica SWB (Sea Waybill). No requiere valija DHL física. Cierra automáticamente con Factura y CO Aprobado."
+    },
+    {
+      "cliente_patron": "AQUACHILE INC",
+      "nombre_oficial": "AQUACHILE INC.",
+      "codigo_sap": "200003348",
+      "categoria": "Intercompany",
+      "analista_titular": "Andreina",
+      "condicion_venta": "Crédito",
+      "formato_liberacion": "SWB",
+      "requiere_dhl": false,
+      "criterio_cierre": "co_aprobado",
+      "notas": "Filial AquaChile en EE.UU. Liberación electrónica SWB (Sea Waybill). No requiere valija DHL física. Cierra automáticamente con Factura y CO Aprobado."
+    },
+    {
+      "cliente_patron": "PRODUCTOS ALIMENTICIOS SUPER",
+      "nombre_oficial": "PRODUCTOS ALIMENTICIOS SUPER",
+      "codigo_sap": "200000019",
+      "categoria": "Intercompany",
+      "analista_titular": "Andreina",
+      "condicion_venta": "Crédito",
+      "formato_liberacion": "SWB",
+      "requiere_dhl": false,
+      "criterio_cierre": "co_aprobado",
+      "notas": "Intercompany matriz (Agrosuper). Liberación electrónica SWB por defecto. No requiere valija DHL física."
+    },
+    {
+      "cliente_patron": "AGROSUPER CHINA",
+      "nombre_oficial": "Agrosuper China Co., Ltd.",
+      "codigo_sap": "200000020",
+      "categoria": "Intercompany",
+      "analista_titular": "Andreina",
+      "condicion_venta": "Crédito",
+      "formato_liberacion": "SWB",
+      "requiere_dhl": false,
+      "criterio_cierre": "co_aprobado",
+      "notas": "Intercompany filial Agrosuper China. Liberación electrónica SWB por defecto."
+    },
+    {
+      "cliente_patron": "ТОО AKS PRODUCT",
+      "nombre_oficial": "ТОО AKS Product",
+      "codigo_sap": "200005314",
+      "categoria": "Comercial",
+      "analista_titular": "Soraya",
+      "formato_liberacion": "SWB",
+      "requiere_dhl": true,
+      "criterio_cierre": "estandar",
+      "condicion_venta": "",
+      "notas": ""
+    },
+    {
+      "cliente_patron": "EL GRAN LANGOSTINO SAS",
+      "nombre_oficial": "EL GRAN LANGOSTINO SAS",
+      "codigo_sap": "200002892",
+      "categoria": "Comercial",
+      "analista_titular": "Eugenia",
+      "formato_liberacion": "Liberación en Destino",
+      "requiere_dhl": false,
+      "criterio_cierre": "co_aprobado",
+      "condicion_venta": "Crédito",
+      "notas": ""
+    },
+    {
+      "cliente_patron": "IMPORFOOD PACIFIC BLUE SAS",
+      "nombre_oficial": "IMPORFOOD PACIFIC BLUE SAS",
+      "codigo_sap": "200004087",
+      "categoria": "Comercial",
+      "analista_titular": "Eugenia",
+      "formato_liberacion": "Liberación en Destino",
+      "requiere_dhl": false,
+      "criterio_cierre": "co_aprobado",
+      "condicion_venta": "Crédito",
+      "notas": ""
+    },
+    {
+      "cliente_patron": "ALIMENTOS MONTE VERDE.C.A.",
+      "nombre_oficial": "ALIMENTOS MONTE VERDE.C.A.",
+      "codigo_sap": "200006055",
+      "categoria": "Comercial",
+      "analista_titular": "Eugenia",
+      "formato_liberacion": "Liberación en Destino",
+      "requiere_dhl": true,
+      "criterio_cierre": "co_aprobado",
+      "condicion_venta": "Anticipo",
+      "notas": "Se imprime y envia todo"
+    },
+    {
+      "cliente_patron": "NSL FOODS PUBLIC COMPANY LIMITED",
+      "nombre_oficial": "NSL Foods Public Company Limited",
+      "codigo_sap": "200004014",
+      "categoria": "Comercial",
+      "analista_titular": "Andreina",
+      "formato_liberacion": "SWB",
+      "requiere_dhl": true,
+      "criterio_cierre": "estandar",
+      "condicion_venta": "Anticipo",
+      "notas": "NSL necesita siempre el certificado de residuo y enviarlo por DHL"
+    },
+    {
+      "cliente_patron": "QINGDAO BEIYANG JIAMEI SEAFOOD CO.,",
+      "nombre_oficial": "Qingdao Beiyang Jiamei Seafood Co.,",
+      "codigo_sap": "200003892",
+      "categoria": "Comercial",
+      "analista_titular": "Andreina",
+      "formato_liberacion": "SWB",
+      "requiere_dhl": true,
+      "criterio_cierre": "estandar",
+      "condicion_venta": "Anticipo",
+      "notas": "No tiene credito, casi todos con anticipo, pero algunos se crean con credito"
+    }
+  ]
+}
