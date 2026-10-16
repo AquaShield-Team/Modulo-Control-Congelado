@@ -1695,8 +1695,26 @@
                 </button>
             </section>
 
+            <!-- BARRA DE TOTALES POR MES (NÚMERO A LA VISTA SEGÚN MES SELECCIONADO) -->
+            <div id="monthTotalsBar" style="display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.55rem 0.9rem; margin-bottom: 0.85rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;" id="monthPillsContainer">
+                    <!-- Píldoras mensuales con totales a la vista generadas por JS -->
+                </div>
+                <div id="selectedMonthSummaryBox" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; font-weight: 700; color: var(--text-primary); background: var(--bg-tertiary); padding: 0.3rem 0.75rem; border-radius: 999px; border: 1px solid var(--border-color);">
+                    <!-- Resumen del mes seleccionado generado por JS -->
+                </div>
+            </div>
+
             <!-- TARJETAS DE INDICADORES (KPIs) -->
             <section class="kpi-grid">
+                <div class="kpi-card primary" onclick="switchViewType('all')" style="border-left: 4px solid var(--color-accent);">
+                    <span class="kpi-title" id="kpiTotalMesTitle">Total Mes (Todos)</span>
+                    <span class="kpi-value" id="kpiTotalMes" style="color: var(--color-accent);">0</span>
+                    <span class="kpi-detail">
+                        <span class="kpi-pill pill-info" id="kpiTotalMesSub">Vigentes + Finalizados</span>
+                    </span>
+                </div>
+
                 <div class="kpi-card primary" onclick="switchViewType('active')">
                     <span class="kpi-title">Activos Facturados</span>
                     <span class="kpi-value" id="kpiActivos">0</span>
@@ -1770,8 +1788,8 @@
 
                 <div class="chart-card">
                     <div class="chart-card-header">
-                        <h3 class="chart-card-title">🚢 Concentración por Nave / Buque</h3>
-                        <span style="font-size: 0.75rem; color: var(--text-secondary);">Top Volúmenes</span>
+                        <h3 class="chart-card-title" id="chartZarpesTitle">📅 Pedidos por Fecha de Zarpe (Vista a 15 Días)</h3>
+                        <span id="chartZarpesSubtitle" style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 700;">Próximos 15 días</span>
                     </div>
                     <div class="chart-canvas-wrapper">
                         <canvas id="chartNaves"></canvas>
@@ -1875,13 +1893,13 @@
                                         <span class="btn-hide-item" onclick="event.stopPropagation(); hideColumn('col-puerto', 'Puertos (Salida / Destino)')" title="Ocultar columna">✕</span>
                                     </div>
                                 </th>
-                                <th class="col-zarpe" onclick="sortTable('zarpe')" title="Fecha de Zarpe ETD y Límite Facturación 48h">
+                                <th class="col-zarpe" onclick="sortTable('zarpe')" title="Fecha de Zarpe ETD y Fecha de Facturación (Límite 48h)">
                                     <div style="display:flex; justify-content:space-between; align-items:center; gap:3px;">
                                         <div style="text-align:center; width:100%;">
                                             <div class="th-title">ETD Zarpe ↕</div>
-                                            <div class="th-subtitle">Plazo BL (48h)</div>
+                                            <div class="th-subtitle">F. Facturación (48h)</div>
                                         </div>
-                                        <span class="btn-hide-item" onclick="event.stopPropagation(); hideColumn('col-zarpe', 'ETD')" title="Ocultar columna">✕</span>
+                                        <span class="btn-hide-item" onclick="event.stopPropagation(); hideColumn('col-zarpe', 'ETD / Facturación')" title="Ocultar columna">✕</span>
                                     </div>
                                 </th>
                                 <th class="col-draft_real" onclick="sortTable('draft_real')" title="Envío Draft: Fecha Envío, Plazo (4d hábiles) y Días de Holgura (+) o Atraso (-)">
@@ -2075,11 +2093,18 @@
                     </div>
                 </div>
 
-                <!-- Fila 3.5: Folio DTE, Folio SAP, Puerto Salida, Puerto Destino -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0.75rem; margin-top: 0.4rem;">
+                <!-- Fila 3.5: Folio DTE, Fecha Facturación, Folio SAP, Puerto Salida, Puerto Destino -->
+                <div style="display: grid; grid-template-columns: 1fr 1.1fr 1fr 1fr 1fr; gap: 0.75rem; margin-top: 0.4rem;">
                     <div class="form-group">
                         <label>N° Factura / Folio DTE:</label>
                         <input type="text" id="quickEditFactura" class="form-control" placeholder="Ej: 175200">
+                    </div>
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <label>Fecha Facturación:</label>
+                            <button type="button" class="btn-reset" onclick="const el=document.getElementById('quickEditFechaFactura'); if(el) el.value=getTodayDMY();" style="font-size: 0.65rem; padding: 1px 5px; color: var(--color-accent);">⚡ Hoy</button>
+                        </div>
+                        <input type="text" id="quickEditFechaFactura" class="form-control" placeholder="DD-MM-YYYY">
                     </div>
                     <div class="form-group">
                         <label>Folio SAP (VF05N):</label>
@@ -3811,17 +3836,20 @@
             optSinAsignar.textContent = '⚠️ Sin Asignar';
             selResp.appendChild(optSinAsignar);
 
-            // Meses
+            // Meses con conteo visible
             const selMes = document.getElementById('filterMes');
-            selMes.innerHTML = '<option value="">Todos los Meses</option>';
+            const currentMesVal = selMes ? selMes.value : '';
+            selMes.innerHTML = `<option value="">Todos los Meses (${allCombinedOrders.length})</option>`;
+            const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
             Array.from(mesSet).sort().forEach(m => {
                 const opt = document.createElement('option');
                 opt.value = m;
                 const [y, mm] = m.split('-');
-                const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-                opt.textContent = `${monthNames[parseInt(mm, 10)-1]} ${y}`;
+                const mCount = allCombinedOrders.filter(o => o.zarpe && o.zarpe.startsWith(m)).length;
+                opt.textContent = `${monthNames[parseInt(mm, 10)-1]} ${y} (${mCount})`;
                 selMes.appendChild(opt);
             });
+            if (currentMesVal) selMes.value = currentMesVal;
 
             // Puertos de Salida
             const puertoSet = new Set();
@@ -4138,8 +4166,104 @@
             applyFilters();
         }
 
+        function selectMonthFilter(mVal) {
+            const selMes = document.getElementById('filterMes');
+            if (!selMes) return;
+            selMes.value = (selMes.value === mVal && mVal !== '') ? '' : mVal;
+            applyFilters();
+        }
+
+        function updateMonthTotalsUI() {
+            const selMes = document.getElementById('filterMes') ? document.getElementById('filterMes').value : '';
+            const selResp = document.getElementById('filterResp') ? document.getElementById('filterResp').value : '';
+            const monthNamesFull = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+            const monthNamesShort = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+            // Filtrar universo por analista si hay un analista seleccionado
+            const respUniverse = allCombinedOrders.filter(o => {
+                if (!selResp) return true;
+                if (selResp === 'Sin Asignar') {
+                    const r = (o.responsable || '').trim().toLowerCase();
+                    return (!r || r === 'sin asignar' || r === 'por asignar' || r === '-' || r === 'nan' || r === 'null');
+                }
+                return o.responsable === selResp;
+            });
+
+            // Calcular totales por cada mes
+            const monthCounts = {};
+            respUniverse.forEach(o => {
+                if (o.zarpe && o.zarpe.length >= 7) {
+                    const mKey = o.zarpe.substring(0, 7);
+                    monthCounts[mKey] = (monthCounts[mKey] || 0) + 1;
+                }
+            });
+
+            const sortedMonths = Object.keys(monthCounts).sort();
+
+            // Renderizar píldoras mensuales con número a la vista
+            const pillsBox = document.getElementById('monthPillsContainer');
+            if (pillsBox) {
+                let html = `<span style="font-size: 0.74rem; font-weight: 800; color: var(--text-secondary); margin-right: 0.25rem;">📅 Totales por Mes:</span>`;
+                const isAllActive = !selMes;
+                html += `<button type="button" onclick="selectMonthFilter('')" style="cursor:pointer; border-radius:999px; padding:0.25rem 0.65rem; font-size:0.74rem; font-weight:700; border:1px solid ${isAllActive ? 'var(--color-primary)' : 'var(--border-color)'}; background:${isAllActive ? 'var(--color-primary)' : 'var(--bg-tertiary)'}; color:${isAllActive ? '#fff' : 'var(--text-primary)'}; transition:all 0.15s;">Todos <span style="font-weight:800; margin-left:3px; padding:1px 6px; border-radius:999px; background:${isAllActive ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.07)'};">${respUniverse.length.toLocaleString()}</span></button>`;
+
+                sortedMonths.forEach(m => {
+                    const [y, mm] = m.split('-');
+                    const mLabel = `${monthNamesShort[parseInt(mm, 10) - 1]} ${y}`;
+                    const cnt = monthCounts[m] || 0;
+                    const isActive = (selMes === m);
+                    html += `<button type="button" onclick="selectMonthFilter('${m}')" style="cursor:pointer; border-radius:999px; padding:0.25rem 0.65rem; font-size:0.74rem; font-weight:700; border:1px solid ${isActive ? 'var(--color-accent)' : 'var(--border-color)'}; background:${isActive ? 'var(--color-accent)' : 'var(--bg-tertiary)'}; color:${isActive ? '#fff' : 'var(--text-primary)'}; transition:all 0.15s;" title="Clic para filtrar ${mLabel}">${mLabel} <span style="font-weight:800; margin-left:3px; padding:1px 6px; border-radius:999px; background:${isActive ? 'rgba(255,255,255,0.24)' : 'rgba(235,95,10,0.12)'}; color:${isActive ? '#fff' : 'var(--color-accent)'};">${cnt.toLocaleString()}</span></button>`;
+                });
+                pillsBox.innerHTML = html;
+            }
+
+            // Universo del mes seleccionado (incluyendo vigentes y finalizados de ese mes)
+            const monthUniverse = selMes
+                ? respUniverse.filter(o => o.zarpe && o.zarpe.startsWith(selMes))
+                : respUniverse;
+
+            const mTotal = monthUniverse.length;
+            const mActivos = monthUniverse.filter(o => o.estatus !== 'Finalizado' && o.estatus !== 'Pendiente de facturar' && o.estatus !== 'Por Despachar').length;
+            const mPendFact = monthUniverse.filter(o => o.estatus === 'Pendiente de facturar').length;
+            const mFuturo = monthUniverse.filter(o => o.estatus === 'Por Despachar').length;
+            const mFinalizados = monthUniverse.filter(o => o.estatus === 'Finalizado').length;
+            const mVigentes = mTotal - mFinalizados;
+
+            let mesTitleText = 'Todos los Meses';
+            let kpiTitleText = 'Total General (Todos)';
+            if (selMes) {
+                const [y, mm] = selMes.split('-');
+                const mName = monthNamesFull[parseInt(mm, 10) - 1] || selMes;
+                mesTitleText = `${mName} ${y}`;
+                kpiTitleText = `Total ${monthNamesShort[parseInt(mm, 10) - 1]} ${y}`;
+            }
+
+            // Actualizar resumen derecho en barra mensual
+            const summaryBox = document.getElementById('selectedMonthSummaryBox');
+            if (summaryBox) {
+                summaryBox.innerHTML = `<span>📌 <strong>${mesTitleText}:</strong> <span style="color:var(--color-accent); font-size:0.86rem; font-weight:800;">${mTotal.toLocaleString()}</span> pedidos</span> <span style="color:var(--text-secondary); font-weight:600;">(${mActivos} act. • ${mPendFact} pend. fact. • ${mFinalizados} fin.)</span>`;
+            }
+
+            // Actualizar tarjeta KPI principal del mes
+            const kpiTitleEl = document.getElementById('kpiTotalMesTitle');
+            const kpiValEl = document.getElementById('kpiTotalMes');
+            const kpiSubEl = document.getElementById('kpiTotalMesSub');
+            if (kpiTitleEl) kpiTitleEl.textContent = kpiTitleText;
+            if (kpiValEl) kpiValEl.textContent = mTotal.toLocaleString();
+            if (kpiSubEl) kpiSubEl.textContent = `${mVigentes.toLocaleString()} vigentes • ${mFinalizados.toLocaleString()} fin.`;
+
+            // Actualizar contadores de las pestañas superiores según el mes/analista seleccionado
+            if (document.getElementById('countTabAll')) document.getElementById('countTabAll').textContent = mVigentes.toLocaleString();
+            if (document.getElementById('countTabActive')) document.getElementById('countTabActive').textContent = mActivos.toLocaleString();
+            if (document.getElementById('countTabFlow')) document.getElementById('countTabFlow').textContent = mPendFact.toLocaleString();
+            if (document.getElementById('countTabFuturo')) document.getElementById('countTabFuturo').textContent = mFuturo.toLocaleString();
+            if (document.getElementById('countTabFinalizados')) document.getElementById('countTabFinalizados').textContent = mFinalizados.toLocaleString();
+        }
+
         // ACTUALIZACIÓN DE INDICADORES (KPIs)
         function updateKPIs() {
+            updateMonthTotalsUI();
+
             const countActivos = filteredOrders.filter(s => s.estatus !== 'Pendiente de facturar' && s.estatus !== 'Por Despachar' && s.estatus !== 'Finalizado').length;
             const countFlujo = filteredOrders.filter(s => s.estatus === 'Pendiente de facturar').length;
             const countFuturo = filteredOrders.filter(s => s.estatus === 'Por Despachar').length;
@@ -4496,6 +4620,34 @@
                 const cleanCliente = (item.cliente || '').replace(/\s*\((?:intercompany|cliente interno)\)/gi, '').trim();
                 const clienteCell = cleanCliente || `<span class="badge-missing">⚠️ Sin Cliente</span>`;
 
+                // Separación visual entre Fecha de Zarpe (ETD) y Fecha de Facturación en la misma celda
+                const zarpeFormatted = item.zarpe ? formatDateDMY(item.zarpe) : '-';
+                const rawFechaFact = (item.fecha_facturacion || item.fecha_factura || '').toString().trim();
+                const hasFechaFact = Boolean(rawFechaFact && rawFechaFact !== '-' && rawFechaFact !== '0' && rawFechaFact.toLowerCase() !== 'nan' && rawFechaFact.toLowerCase() !== 'null');
+                let factDateHtml = '';
+                if (hasFechaFact) {
+                    const fFactDMY = formatDateDMY(rawFechaFact);
+                    const fFactISO = normalizeDateISO(rawFechaFact);
+                    let slaChip = '';
+                    if (item.zarpe && fFactISO && /^\d{4}-\d{2}-\d{2}$/.test(item.zarpe) && /^\d{4}-\d{2}-\d{2}$/.test(fFactISO)) {
+                        const dZ = new Date(item.zarpe + 'T00:00:00');
+                        const dF = new Date(fFactISO + 'T00:00:00');
+                        const diffDays = Math.round((dF - dZ) / 86400000);
+                        if (!isNaN(diffDays)) {
+                            const isOk = diffDays <= 2;
+                            const chipBg = isOk ? 'rgba(16, 185, 129, 0.14)' : 'rgba(235, 95, 10, 0.15)';
+                            const chipColor = isOk ? '#059669' : '#EB5F0A';
+                            const sign = diffDays > 0 ? `+${diffDays}d` : `${diffDays}d`;
+                            slaChip = ` <span style="font-size:0.58rem; padding:0px 4px; border-radius:4px; background:${chipBg}; color:${chipColor}; font-weight:700;" title="Diferencia Zarpe vs Facturación: ${sign} (Meta SLA ≤ 48h)">${sign}</span>`;
+                        }
+                    }
+                    factDateHtml = `<div style="border-top: 1px dashed var(--border-color); margin-top: 3px; padding-top: 2px; font-size: 0.68rem; color: var(--color-accent); font-weight: 600;" title="Fecha de Facturación: ${fFactDMY}">🧾 ${fFactDMY}${slaChip}</div>`;
+                } else if (hasFactura || hasSap) {
+                    factDateHtml = `<div style="border-top: 1px dashed var(--border-color); margin-top: 3px; padding-top: 2px; font-size: 0.63rem; color: var(--text-muted);" title="Facturado sin fecha de facturación registrada">🧾 S/Fecha Fact.</div>`;
+                } else {
+                    factDateHtml = `<div style="border-top: 1px dashed var(--border-color); margin-top: 3px; padding-top: 2px; font-size: 0.63rem; color: #D97706; font-weight: 600;" title="Pendiente de Facturación">🧾 Pend. Facturar</div>`;
+                }
+
                 tr.innerHTML = `
                     <td class="sticky-col-1">${estatusBadge}</td>
                     <td class="sticky-col-2">${respCell}${sapSupportSub}</td>
@@ -4519,8 +4671,9 @@
                         <div style="margin-top: 2px;">${puertoDestCell}</div>
                     </td>
                     <td class="col-zarpe" style="text-align: center; white-space: nowrap;">
-                        <div style="font-weight:600; font-size:0.76rem;">${item.zarpe ? formatDateDMY(item.zarpe) : '-'}</div>
-                        <div style="margin-top: 2px;">${blNavieraAlert}</div>
+                        <div style="font-weight:700; font-size:0.75rem;" title="ETD (Fecha de Zarpe)">🚢 ${zarpeFormatted}</div>
+                        ${factDateHtml}
+                        ${blNavieraAlert ? `<div style="margin-top: 2px;">${blNavieraAlert}</div>` : ''}
                     </td>
                     <td class="col-draft_real" style="text-align: center; white-space: nowrap;">${draftRealCell}</td>
                     <td class="col-co_aprobado" style="text-align: center; white-space: nowrap;">${coAprobadoCell}</td>
@@ -4619,16 +4772,64 @@
                 }
             });
 
-            // Gráfico 2: Concentración por Nave
-            const navesMap = {};
+            // Gráfico 2: Concentración por Fecha de Zarpe (Vista a 15 Días)
+            const zarpesMap = {};
             filteredOrders.forEach(s => {
-                if (s.nave) {
-                    navesMap[s.nave] = (navesMap[s.nave] || 0) + 1;
+                const z = (s.zarpe || '').toString().trim();
+                if (/^\d{4}-\d{2}-\d{2}$/.test(z)) {
+                    if (!zarpesMap[z]) zarpesMap[z] = { total: 0, facturados: 0, pendientes: 0 };
+                    zarpesMap[z].total++;
+                    const hasFac = Boolean((s.factura && s.factura !== '-' && s.factura !== 'No facturado' && s.factura !== '0') || (s.doc_factura && s.doc_factura !== '-' && s.doc_factura !== '0'));
+                    if (hasFac && s.estatus !== 'Pendiente de facturar') {
+                        zarpesMap[z].facturados++;
+                    } else {
+                        zarpesMap[z].pendientes++;
+                    }
                 }
             });
 
-            const topNaves = Object.keys(navesMap).sort((a, b) => navesMap[b] - navesMap[a]).slice(0, 7);
-            const topNavesCounts = topNaves.map(n => navesMap[n]);
+            const allZarpeDates = Object.keys(zarpesMap).sort();
+            let selected15Dates = [];
+            const selectedMes = document.getElementById('filterMes') ? document.getElementById('filterMes').value : '';
+
+            if (selectedMes) {
+                // Si hay un mes seleccionado, mostrar las 15 fechas con mayor volumen de ese mes ordenadas cronológicamente
+                selected15Dates = [...allZarpeDates]
+                    .sort((a, b) => zarpesMap[b].total - zarpesMap[a].total)
+                    .slice(0, 15)
+                    .sort();
+            } else {
+                // Horizonte operativo a 15 días: priorizar desde hace 5 días hacia adelante (próximos 15 días con zarpe)
+                const refDate = new Date();
+                refDate.setDate(refDate.getDate() - 5);
+                const refIso = refDate.toISOString().slice(0, 10);
+                const upcomingDates = allZarpeDates.filter(d => d >= refIso);
+                if (upcomingDates.length >= 15) {
+                    selected15Dates = upcomingDates.slice(0, 15);
+                } else {
+                    selected15Dates = allZarpeDates.slice(-15);
+                }
+            }
+
+            const labelsZarpe = selected15Dates.map(d => {
+                const parts = d.split('-');
+                return `${parts[2]}-${parts[1]}`;
+            });
+            const countsFacturados = selected15Dates.map(d => zarpesMap[d].facturados);
+            const countsPendientes = selected15Dates.map(d => zarpesMap[d].pendientes);
+            const total15Days = selected15Dates.reduce((acc, d) => acc + zarpesMap[d].total, 0);
+            const pend15Days = selected15Dates.reduce((acc, d) => acc + zarpesMap[d].pendientes, 0);
+
+            const subEl = document.getElementById('chartZarpesSubtitle');
+            if (subEl) {
+                if (selected15Dates.length > 0) {
+                    const firstDM = labelsZarpe[0];
+                    const lastDM = labelsZarpe[labelsZarpe.length - 1];
+                    subEl.textContent = `${firstDM} al ${lastDM}: ${total15Days} pedidos (${pend15Days} pend. facturar)`;
+                } else {
+                    subEl.textContent = 'Sin fechas de zarpe en filtro actual';
+                }
+            }
 
             const ctxNaves = document.getElementById('chartNaves').getContext('2d');
             if (chartNavesInstance) chartNavesInstance.destroy();
@@ -4636,24 +4837,40 @@
             chartNavesInstance = new Chart(ctxNaves, {
                 type: 'bar',
                 data: {
-                    labels: topNaves,
-                    datasets: [{
-                        label: 'Pedidos por Buque',
-                        data: topNavesCounts,
-                        backgroundColor: '#EB5F0A',
-                        borderRadius: 4
-                    }]
+                    labels: labelsZarpe,
+                    datasets: [
+                        {
+                            label: 'Facturados',
+                            data: countsFacturados,
+                            backgroundColor: '#10B981',
+                            borderRadius: 3
+                        },
+                        {
+                            label: 'Pend. Facturar / Flujo',
+                            data: countsPendientes,
+                            backgroundColor: '#EB5F0A',
+                            borderRadius: 3
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    indexAxis: 'y',
                     scales: {
-                        x: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } },
-                        y: { ticks: { color: textColor, font: { size: 10 } }, grid: { display: false } }
+                        x: { stacked: true, ticks: { color: textColor, font: { size: 9, weight: 'bold' }, maxRotation: 45, minRotation: 0 }, grid: { display: false } },
+                        y: { stacked: true, ticks: { color: textColor, font: { size: 10 }, precision: 0 }, grid: { color: gridColor } }
                     },
                     plugins: {
-                        legend: { display: false }
+                        legend: { position: 'top', labels: { color: textColor, font: { size: 10 }, boxWidth: 12 } },
+                        tooltip: {
+                            callbacks: {
+                                title: function(ctx) {
+                                    const idx = ctx[0].dataIndex;
+                                    const iso = selected15Dates[idx] || '';
+                                    return `📅 Zarpe (ETD): ${formatDateDMY(iso)} (Total: ${zarpesMap[iso] ? zarpesMap[iso].total : 0})`;
+                                }
+                            }
+                        }
                     }
                 }
             });
@@ -4788,6 +5005,7 @@
                 safeSet('quickEditZarpe', formatDateDMY(item.zarpe));
                 safeSet('quickEditEta', formatDateDMY(item.eta));
                 safeSet('quickEditFactura', item.factura || '');
+                safeSet('quickEditFechaFactura', formatDateDMY(item.fecha_facturacion || item.fecha_factura || ''));
                 safeSet('quickEditFolioSap', item.doc_factura || item.folio_sap || '');
                 safeSet('quickEditBl', item.bl || '', true);
                 safeSet('quickEditContenedor', item.contenedor || '', true);
@@ -4971,6 +5189,7 @@
             const newZarpe = normalizeDateISO(document.getElementById('quickEditZarpe').value.trim());
             const newEta = normalizeDateISO(document.getElementById('quickEditEta') ? document.getElementById('quickEditEta').value.trim() : '');
             const newFactura = document.getElementById('quickEditFactura').value.trim();
+            const newFechaFactura = normalizeDateISO(document.getElementById('quickEditFechaFactura') ? document.getElementById('quickEditFechaFactura').value.trim() : (currentDetailOrder.fecha_facturacion || currentDetailOrder.fecha_factura || ''));
             const newFolioSap = document.getElementById('quickEditFolioSap').value.trim();
             const newBl = document.getElementById('quickEditBl').value.trim();
             const newDraftReal = normalizeDateISO(document.getElementById('quickEditDraftReal').value.trim());
@@ -5042,6 +5261,8 @@
                 zarpe: newZarpe || currentDetailOrder.zarpe,
                 eta: newEta || currentDetailOrder.eta,
                 factura: newFactura,
+                fecha_factura: newFechaFactura,
+                fecha_facturacion: newFechaFactura,
                 doc_factura: newFolioSap,
                 folio_sap: newFolioSap,
                 bl: newBl,
@@ -5516,7 +5737,8 @@
                 "N° BL": p.bl || '',
                 "Contenedor": p.contenedor || '',
                 "Nave": p.nave,
-                "Zarpe": p.zarpe ? formatDateDMY(p.zarpe) : '',
+                "Zarpe (ETD)": p.zarpe ? formatDateDMY(p.zarpe) : '',
+                "Fecha Facturación": (p.fecha_facturacion || p.fecha_factura) ? formatDateDMY(p.fecha_facturacion || p.fecha_factura) : '',
                 "ETA": p.eta ? formatDateDMY(p.eta) : '',
                 "Puerto Salida": p.puerto || '',
                 "Puerto Destino": p.puerto_destino || '',
@@ -5565,12 +5787,12 @@
                 "PUERTO SALIDA": p.puerto || '',
                 "PUERTO DESTINO": p.puerto_destino || '',
                 "ETD (FECHA ZARPE)": p.zarpe ? formatDateDMY(p.zarpe) : '',
+                "FECHA FACTURACION": (p.fecha_facturacion || p.fecha_factura) ? formatDateDMY(p.fecha_facturacion || p.fecha_factura) : '',
                 "ETA (FECHA ARRIBO)": p.eta ? formatDateDMY(p.eta) : '',
                 "CONDICION DE VENTA": p.condicion_venta || '',
                 "INCOTERM": p.incoterm || '',
                 "FACTURA (FOLIO SII)": p.factura || '',
                 "FOLIO SAP (VF05N)": p.doc_factura || p.folio_sap || '',
-                "FECHA FACTURACION": (p.fecha_facturacion || p.fecha_factura) ? formatDateDMY(p.fecha_facturacion || p.fecha_factura) : '',
                 "FORMATO LIBERACION": p.formato_liberacion || '',
                 "RELEASE (SWB / FECHA)": (p.swb_liberacion || p.swb) ? (isDateValue(p.swb_liberacion || p.swb) ? formatDateDMY(p.swb_liberacion || p.swb) : (p.swb_liberacion || p.swb)) : '',
                 "FECHA DHL": (function() {
