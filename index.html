@@ -5835,23 +5835,26 @@
 
         // MAPA OFICIAL DE AUTORES SAP Y EQUIPOS COMEX
         const SAP_EQUIPOS_AUTORES = {
-            'DPINCOL':    { analista: 'Daphne',          equipo: 'Fresco' },
-            'SMOHOR':     { analista: 'Scandar',         equipo: 'Fresco' },
-            'VVENEGAS':   { analista: 'Victor',          equipo: 'Fresco' },
-            'ESILVAJ':    { analista: 'Evelyn',          equipo: 'Fresco' },
-            'CZAMORANO':  { analista: 'Cristina',        equipo: 'Fresco' },
-            'JOSANCHEZM': { analista: 'Jonathan',        equipo: 'Congelado' },
-            'EMARTINEZG': { analista: 'Eugenia',         equipo: 'Congelado' },
-            'EMARTINEZ':  { analista: 'Eugenia',         equipo: 'Congelado' },
-            'YVALERO':    { analista: 'Andreina',        equipo: 'Congelado' },
-            'MIFIGUEROA': { analista: 'Matías Figueroa', equipo: 'Congelado' },
-            'MNSOTO':     { analista: 'Matías Soto',     equipo: 'Congelado' },
-            'LCONEJEROSM':{ analista: 'Libni',           equipo: 'Congelado' },
-            'SNAGUIL':    { analista: 'Soraya',          equipo: 'Congelado' },
-            'MRAMIREZ':   { analista: 'Andreina',        equipo: 'Congelado' }
+            'DPINCOL':     { analista: 'Daphne',          equipo: 'Fresco' },
+            'SMOHOR':      { analista: 'Scandar',         equipo: 'Fresco' },
+            'VVENEGAS':    { analista: 'Victor',          equipo: 'Fresco' },
+            'ESILVAJ':     { analista: 'Evelyn',          equipo: 'Fresco' },
+            'CZAMORANO':   { analista: 'Cristina',        equipo: 'Fresco' },
+            'XLEICHTLE':   { analista: 'Ximena Leichtle', equipo: 'Fresco' },
+            'JOSANCHEZM':  { analista: 'Jonathan',        equipo: 'Congelado' },
+            'EMARTINEZG':  { analista: 'Eugenia',         equipo: 'Congelado' },
+            'EMARTINEZ':   { analista: 'Eugenia',         equipo: 'Congelado' },
+            'YVALERO':     { analista: 'Andreina',        equipo: 'Congelado' },
+            'MIFIGUEROA':  { analista: 'Matías Figueroa', equipo: 'Congelado' },
+            'MNSOTO':      { analista: 'Matías Soto',     equipo: 'Congelado' },
+            'LCONEJEROSM': { analista: 'Libni',           equipo: 'Congelado' },
+            'SNAGUIL':     { analista: 'Soraya',          equipo: 'Congelado' },
+            'MRAMIREZ':    { analista: 'Andreina',        equipo: 'Congelado' },
+            'GCHACANO':    { analista: 'Gonzalo Chacano', equipo: 'Apoyo' },
+            'MESPINOSAB':  { analista: 'Macarena',        equipo: 'Apoyo' }
         };
 
-        async function uploadFileToBackend(file, fileType, stat1, stat2, stat3, stat4) {
+        async function uploadFileToBackend(file, fileType, stat1, stat2, stat3, stat4, stat5) {
             try {
                 const formData = new FormData();
                 formData.append('file', file);
@@ -5886,11 +5889,12 @@
             if (fileType === 'vf05n') {
                 alert(
                     `✅ Planilla VF05N de SAP procesada con éxito.\n\n` +
-                    `• Facturas SAP leídas: ${stat1.toLocaleString()}\n` +
-                    `• Pedidos cruzados con su factura: ${stat2.toLocaleString()}\n` +
+                    `• Facturas SAP leídas en archivo: ${(stat1 || 0).toLocaleString()}\n` +
+                    `• Pedidos del sistema vinculados con VF05N: ${(stat2 || 0).toLocaleString()}\n` +
+                    `• Pedidos con cambios nuevos aplicados hoy: ${(stat5 || 0).toLocaleString()}\n` +
                     (stat3 ? `• Pedidos que pasaron de Pendiente a Facturado: ${stat3.toLocaleString()}\n` : ``) +
-                    (stat4 ? `• Analistas asignados automáticamente: ${stat4.toLocaleString()}\n\n` : `\n`) +
-                    `Los autores SAP, folios y estatus se han actualizado correctamente.`
+                    (stat4 ? `• Analistas asignados automáticamente (pedidos sin titular): ${stat4.toLocaleString()}\n` : ``) +
+                    `\nNota: Cuando un pedido ya tiene analista titular asignado por Planilla o Cartera, el autor de facturación SAP (VF05N) se registra como apoyo sin quitarle la titularidad al responsable del pedido.`
                 );
             } else if (fileType === 'cartera') {
                 alert(
@@ -5914,10 +5918,14 @@
             showToast(`🧾 Procesando planilla VF05N (${rows.length.toLocaleString()} facturas SAP)...`);
 
             const colFact = colMap.factura || keys.find(k => k.toLowerCase().includes('fact') || k.toLowerCase().includes('doc')) || keys[0];
-            const colAut = colMap.autor || keys.find(k => k.toLowerCase().includes('autor') || k.toLowerCase().includes('ernam')) || keys[keys.length - 1];
+            const colAut = colMap.autor || keys.find(k => k.toLowerCase().includes('autor') || k.toLowerCase().includes('ernam') || k.toLowerCase().includes('creado')) || keys[keys.length - 1];
             const colFec = colMap.fecha || keys.find(k => k.toLowerCase().includes('fecha'));
+            const colRef = keys.find(k => k.toLowerCase().includes('referencia') || k.toLowerCase().includes('xblnr') || k.toLowerCase().includes('sii'));
+            const colPed = keys.find(k => k.toLowerCase().includes('pedido') || k.toLowerCase().includes('modelo') || k.toLowerCase().includes('aubel'));
 
             const vfMap = {};
+            const vfByRef = {};
+            const vfByPed = {};
             let facturasLeidas = 0;
 
             rows.forEach(r => {
@@ -5927,17 +5935,27 @@
                     const docClean = normalizeSapDoc(doc);
                     if (!docClean) return;
                     const autCode = String(aut).trim().toUpperCase();
-                    const info = SAP_EQUIPOS_AUTORES[autCode] || { analista: autCode, equipo: 'Congelado' };
+                    const info = SAP_EQUIPOS_AUTORES[autCode] || { analista: autCode, equipo: 'Otro' };
                     let fDateStr = '';
                     if (colFec && r[colFec]) {
                         fDateStr = normalizeDateISO(r[colFec]) || String(r[colFec]).trim().slice(0, 10);
                     }
-                    vfMap[docClean] = {
+                    const entry = {
+                        doc: docClean,
                         codigo: autCode,
                         analista: info.analista,
                         equipo: info.equipo,
                         fecha: fDateStr
                     };
+                    vfMap[docClean] = entry;
+                    if (colRef && r[colRef]) {
+                        const refClean = String(r[colRef]).trim().replace(/\.0$/, '').replace(/^0+/, '');
+                        if (refClean) vfByRef[refClean] = entry;
+                    }
+                    if (colPed && r[colPed]) {
+                        const pedClean = String(r[colPed]).trim().replace(/\.0$/, '').replace(/^0+/, '');
+                        if (pedClean) vfByPed[pedClean] = entry;
+                    }
                     facturasLeidas++;
                 }
             });
@@ -5945,13 +5963,14 @@
             let matchedCount = 0;
             let facturadosCount = 0;
             let reassignedCount = 0;
+            let changedOrdersCount = 0;
 
             allCombinedOrders.forEach(order => {
+                const pKey = String(order.pedido).trim().replace(/^0+/, '');
                 const candidateDocs = [
                     ...extractSapDocs(order.doc_factura),
                     ...extractSapDocs(order.factura)
                 ];
-                if (candidateDocs.length === 0) return;
 
                 let match = null;
                 let matchedDoc = null;
@@ -5961,11 +5980,19 @@
                         matchedDoc = d;
                         break;
                     }
+                    if (vfByRef[d]) {
+                        match = vfByRef[d];
+                        matchedDoc = match.doc;
+                        break;
+                    }
+                }
+                if (!match && pKey && vfByPed[pKey]) {
+                    match = vfByPed[pKey];
+                    matchedDoc = match.doc;
                 }
 
                 if (match) {
                     matchedCount++;
-                    const pKey = String(order.pedido).trim().replace(/^0+/, '');
                     const editObj = localEdits[pKey] || { pedido: pKey, ...order };
                     let changed = false;
 
@@ -5983,12 +6010,15 @@
                         changed = true;
                     }
 
-                    // 3. Documento Factura
-                    if (!order.factura || order.factura === 'No facturado') {
-                        order.factura = matchedDoc;
+                    // 3. Documento Factura SAP
+                    if (!order.doc_factura || order.doc_factura === 'No facturado') {
                         order.doc_factura = matchedDoc;
-                        editObj.factura = matchedDoc;
                         editObj.doc_factura = matchedDoc;
+                        changed = true;
+                    }
+                    if (!order.factura || order.factura === 'No facturado' || order.factura === '-') {
+                        order.factura = matchedDoc;
+                        editObj.factura = matchedDoc;
                         changed = true;
                     }
 
@@ -6008,7 +6038,7 @@
                         changed = true;
                     }
 
-                    // 5. Asignación si no tiene analista
+                    // 5. Asignación si no tiene analista titular
                     if (match.equipo === 'Congelado' && (!order.responsable || order.responsable === 'Sin Asignar' || order.responsable === 'Por asignar')) {
                         order.responsable = match.analista;
                         order.metodo_asignacion = `SAP VF05N (${match.analista})`;
@@ -6016,13 +6046,32 @@
                         editObj.metodo_asignacion = order.metodo_asignacion;
                         reassignedCount++;
                         changed = true;
+                    } else if (order.responsable && order.responsable !== match.analista && match.analista) {
+                        // Registrar en método de asignación que hubo apoyo de facturación SAP si aún no figuraba
+                        const baseMetodo = String(order.metodo_asignacion || `Planilla Excel (${order.responsable})`).split(' [Apoyo')[0];
+                        const nuevoMetodo = `${baseMetodo} [Apoyo facturación SAP: ${match.analista}]`;
+                        if (order.metodo_asignacion !== nuevoMetodo) {
+                            order.metodo_asignacion = nuevoMetodo;
+                            editObj.metodo_asignacion = nuevoMetodo;
+                            changed = true;
+                        }
                     }
 
                     if (changed) {
-                        // Actualizado en memoria para reflejar inmediatamente
+                        order._isLocallyEdited = true;
+                        localEdits[pKey] = editObj;
+                        changedOrdersCount++;
                     }
                 }
             });
+
+            if (changedOrdersCount > 0) {
+                try {
+                    localStorage.setItem('aquashield_congelado_edits', JSON.stringify(localEdits));
+                } catch (e) {
+                    console.warn("No se pudo guardar en localStorage:", e);
+                }
+            }
 
             updateLocalEditsBadge();
             renderAnalystPills();
@@ -6032,7 +6081,7 @@
             if (chartRespInstance) updateCharts();
             closeDropzone();
 
-            uploadFileToBackend(file, 'vf05n', facturasLeidas, matchedCount, facturadosCount, reassignedCount);
+            uploadFileToBackend(file, 'vf05n', facturasLeidas, matchedCount, facturadosCount, reassignedCount, changedOrdersCount);
         }
 
         async function processCarteraFile(file, rows, keys, colMap) {
