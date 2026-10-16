@@ -727,6 +727,41 @@ def main():
 
     # Cargar previamente cambios manuales si existen para enriquecer excel_ped_resp
     json_manual_path = "cambios_manuales.json"
+    firebase_url = "https://aquashield-comex-default-rtdb.firebaseio.com/.json"
+    try:
+        import urllib.request
+        req_fb = urllib.request.Request(firebase_url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req_fb, timeout=6) as resp_fb:
+            if resp_fb.status == 200:
+                fb_data = json.loads(resp_fb.read().decode('utf-8')) or {}
+                fb_edits = fb_data.get("ediciones_congelado", {})
+                fb_manuals = fb_data.get("manuales_congelado", {})
+                if fb_edits or fb_manuals:
+                    local_store = {"edits": {}, "manual_orders": [], "newOrders": [], "deleted_orders": []}
+                    if os.path.exists(json_manual_path):
+                        try:
+                            with open(json_manual_path, "r", encoding="utf-8") as f_m:
+                                local_store = json.load(f_m)
+                        except Exception:
+                            pass
+                    if "edits" not in local_store or not isinstance(local_store["edits"], dict):
+                        local_store["edits"] = {}
+                    local_store["edits"].update(fb_edits)
+                    if fb_manuals and isinstance(fb_manuals, dict):
+                        existing_new = local_store.get("newOrders", [])
+                        if not isinstance(existing_new, list):
+                            existing_new = []
+                        existing_peds = {str(x.get("pedido", "")).strip() for x in existing_new if isinstance(x, dict)}
+                        for p_k, m_ord in fb_manuals.items():
+                            if isinstance(m_ord, dict) and str(p_k).strip() not in existing_peds:
+                                existing_new.append(m_ord)
+                        local_store["newOrders"] = existing_new
+                    with open(json_manual_path, "w", encoding="utf-8") as f_m:
+                        json.dump(local_store, f_m, ensure_ascii=False, indent=2)
+                    print(f"   [OK] Sincronizados desde Firebase: {len(fb_edits)} pedidos editados.")
+    except Exception as e_fb:
+        print("   [AVISO] No se pudo conectar a Firebase:", e_fb)
+
     if os.path.exists(json_manual_path):
         try:
             with open(json_manual_path, "r", encoding="utf-8") as f_man:

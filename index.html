@@ -8438,6 +8438,138 @@
             }
         });
 
+        // =========================================================================
+        // SINCRONIZACIÓN EN VIVO EN LA NUBE (FIREBASE REALTIME DATABASE)
+        // =========================================================================
+        (function initCloudSync() {
+            const FIREBASE_BASE_URL = "https://aquashield-comex-default-rtdb.firebaseio.com";
+            let isPullingFromCloud = false;
+            let lastCloudHash = "";
+
+            async function pushLocalToCloud() {
+                if (isPullingFromCloud) return;
+                try {
+                    const editsToPush = {};
+                    Object.entries(localEdits || {}).forEach(([pKey, ed]) => {
+                        if (pKey && ed) {
+                            editsToPush[pKey] = { ...ed, _cloudUpdatedAt: ed._cloudUpdatedAt || Date.now() };
+                        }
+                    });
+
+                    const manualToPush = {};
+                    (manualOrders || []).forEach(m => {
+                        if (m && m.pedido) {
+                            const pk = String(m.pedido).trim().replace(/^0+/, '');
+                            manualToPush[pk] = { ...m, _isManualNew: true };
+                        }
+                    });
+
+                    if (Object.keys(editsToPush).length > 0) {
+                        await fetch(`${FIREBASE_BASE_URL}/ediciones_congelado.json`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(editsToPush)
+                        });
+                    }
+
+                    if (Object.keys(manualToPush).length > 0) {
+                        await fetch(`${FIREBASE_BASE_URL}/manuales_congelado.json`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(manualToPush)
+                        });
+                    }
+                } catch (err) {
+                    console.warn("Aviso: No se pudo subir a Firebase:", err);
+                }
+            }
+
+            async function pullFromCloud() {
+                try {
+                    const res = await fetch(`${FIREBASE_BASE_URL}/.json`);
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (!data) return;
+
+                    const rawHash = JSON.stringify(data);
+                    if (rawHash === lastCloudHash) return;
+                    lastCloudHash = rawHash;
+
+                    isPullingFromCloud = true;
+                    let changesApplied = 0;
+
+                    const cloudManuals = data.manuales_congelado || {};
+                    const cloudEdits = data.ediciones_congelado || {};
+
+                    Object.entries(cloudManuals).forEach(([pKey, mOrder]) => {
+                        if (!mOrder || !pKey) return;
+                        const exists = allCombinedOrders.some(o => String(o.pedido).trim().replace(/^0+/, '') === String(pKey));
+                        if (!exists) {
+                            allCombinedOrders.unshift(mOrder);
+                            activeOrdersList.unshift(mOrder);
+                            manualOrders.unshift(mOrder);
+                            changesApplied++;
+                        }
+                    });
+
+                    Object.entries(cloudEdits).forEach(([pKey, cEdit]) => {
+                        if (!cEdit || !pKey) return;
+                        const target = allCombinedOrders.find(o => String(o.pedido).trim().replace(/^0+/, '') === String(pKey));
+                        if (target) {
+                            let orderModified = false;
+                            Object.entries(cEdit).forEach(([field, val]) => {
+                                if (field.startsWith('_') || field === 'id') return;
+                                if (val !== undefined && val !== null && val !== '' && target[field] !== val) {
+                                    target[field] = val;
+                                    orderModified = true;
+                                }
+                            });
+                            if (orderModified) {
+                                target._isLocallyEdited = true;
+                                localEdits[pKey] = { ...(localEdits[pKey] || {}), ...cEdit };
+                                changesApplied++;
+                            }
+                        }
+                    });
+
+                    if (changesApplied > 0) {
+                        origSetItem.call(localStorage, 'aquashield_congelado_edits', JSON.stringify(localEdits));
+                        origSetItem.call(localStorage, 'aquashield_congelado_manual', JSON.stringify(manualOrders));
+
+                        if (typeof updateLocalEditsBadge === 'function') updateLocalEditsBadge();
+                        if (typeof renderAnalystPills === 'function') renderAnalystPills();
+                        if (typeof updateTabCounts === 'function') updateTabCounts();
+                        if (typeof updateWorkloadSection === 'function') updateWorkloadSection();
+                        if (typeof applyFilters === 'function') applyFilters();
+                        if (typeof chartRespInstance !== 'undefined' && chartRespInstance && typeof updateCharts === 'function') updateCharts();
+                        if (typeof showToast === 'function') {
+                            showToast(`☁️ Sincronizado en vivo: ${changesApplied} pedido(s) actualizado(s) por el equipo.`);
+                        }
+                    }
+                } catch (err) {
+                    console.warn("Aviso: No se pudo leer desde Firebase:", err);
+                } finally {
+                    isPullingFromCloud = false;
+                }
+            }
+
+            const origSetItem = Storage.prototype.setItem;
+            Storage.prototype.setItem = function(key, value) {
+                origSetItem.apply(this, arguments);
+                if (!isPullingFromCloud && (key === 'aquashield_congelado_edits' || key === 'aquashield_congelado_manual')) {
+                    setTimeout(pushLocalToCloud, 150);
+                }
+            };
+
+            setTimeout(async () => {
+                await pushLocalToCloud();
+                await pullFromCloud();
+            }, 1500);
+
+            setInterval(pullFromCloud, 6000);
+            window.addEventListener('focus', pullFromCloud);
+        })();
+
     </script>
 </body>
 </html>
