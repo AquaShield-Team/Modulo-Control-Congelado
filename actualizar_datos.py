@@ -777,15 +777,16 @@ def main():
     for c in range(1, ws_cc.max_column + 1):
         h_val = str(ws_cc.cell(row=1, column=c).value or '').strip().upper()
         if 'RESPONSABLE' in h_val: header_col['resp'] = c
-        elif 'SOLICITANTE' in h_val or 'CLIENTE' in h_val: header_col['cli'] = c
+        elif ('SOLICITANTE' in h_val or 'CLIENTE' in h_val) and 'CODIGO' not in h_val and 'CÓDIGO' not in h_val and 'COD.' not in h_val: header_col['cli'] = c
         elif 'PEDIDO' in h_val: header_col['ped'] = c
         elif 'NAVE' in h_val and 'NAVIERA' not in h_val: header_col['nave'] = c
-        elif 'ZARPE' in h_val or 'P44' in h_val or h_val == 'ETD': header_col['zarpe'] = c
+        elif ('ZARPE' in h_val or 'P44' in h_val or h_val == 'ETD' or 'ETD (' in h_val) and 'MES' not in h_val: header_col['zarpe'] = c
         elif 'ETA' in h_val: header_col['eta'] = c
         elif 'PUERTO' in h_val and 'DESTINO' not in h_val: header_col['puerto'] = c
-        elif 'RESERVA' in h_val or 'BOOKING' in h_val or 'N° BL' in h_val: header_col['reserva'] = c
+        elif 'RESERVA' in h_val or 'BOOKING' in h_val or 'BL' in h_val:
+            if 'ALERTA' not in h_val: header_col['reserva'] = c
         elif 'FOLIO FACTURA' in h_val or h_val == 'FACTURA' or 'FACTURA (FOLIO' in h_val: header_col['fac'] = c
-        elif 'FECHA FACTURA' in h_val or 'F. FACTURA' in h_val: header_col['f_fac'] = c
+        elif ('FECHA FACTURA' in h_val or 'F. FACTURA' in h_val) and 'CO' not in h_val: header_col['f_fac'] = c
         elif 'REAL' in h_val and 'DRAFT' in h_val: header_col['draft_r'] = c
         elif 'PLAZO' in h_val and 'DRAFT' in h_val: header_col['draft_p'] = c
         elif 'ESPERADO' in h_val and 'DRAFT' in h_val: header_col['draft_e'] = c
@@ -797,7 +798,7 @@ def main():
         elif 'GUIA DHL' in h_val or 'GUÍA DHL' in h_val or 'NRO DHL' in h_val or 'N° DHL' in h_val: header_col['nro_dhl'] = c
         elif 'DHL' in h_val: header_col['dhl'] = c
         elif 'SWB' in h_val or 'RELEASE' in h_val: header_col['swb'] = c
-        elif 'CONDICION' in h_val or 'CONDICIÓN' in h_val or 'VENTA' in h_val or 'PAGO' in h_val: header_col['condicion'] = c
+        elif ('CONDICION' in h_val or 'CONDICIÓN' in h_val or 'VENTA' in h_val or 'PAGO' in h_val) and 'POST' not in h_val: header_col['condicion'] = c
         elif 'OBSERVACI' in h_val: header_col['obs'] = c
 
     active_by_ped = {}

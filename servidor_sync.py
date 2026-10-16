@@ -73,15 +73,43 @@ def upload():
         if not dest_path.startswith(BASE_DIR):
             return jsonify({'success': False, 'error': 'Ruta de destino inválida'}), 400
 
-        if os.path.exists(dest_path):
-            backup_path = os.path.join(BASE_DIR, f"{os.path.splitext(target_name)[0]}_BACKUP.xlsx")
+        # Protección crítica: si es Control Congelado Comex 2026.xlsx, verificar que NO sea un archivo parcial/filtrado
+        if target_name == 'Control Congelado Comex 2026.xlsx' and os.path.exists(dest_path):
+            tmp_upload = os.path.join(BASE_DIR, 'temp_upload_check.xlsx')
+            file.save(tmp_upload)
             try:
-                shutil.copyfile(dest_path, backup_path)
-            except Exception:
-                pass
-        
-        file.save(dest_path)
-        print(f"-> Archivo guardado con exito como: {target_name}")
+                import openpyxl
+                wb_new = openpyxl.load_workbook(tmp_upload, read_only=True)
+                new_rows = wb_new.active.max_row or 0
+                wb_new.close()
+                wb_old = openpyxl.load_workbook(dest_path, read_only=True)
+                old_rows = wb_old.active.max_row or 0
+                wb_old.close()
+                if old_rows > 300 and new_rows < (old_rows * 0.6):
+                    os.remove(tmp_upload)
+                    print(f"-> [PROTECCION] Archivo parcial detectado ({new_rows} filas vs {old_rows} de la base maestra). Se mantienen las {old_rows} filas maestras y se sincronizan cambios vía Firebase/cambios_manuales.json.")
+                    cmd = [sys.executable, os.path.join(BASE_DIR, 'actualizar_datos.py')]
+                    r = subprocess.run(cmd, capture_output=True, text=True, cwd=BASE_DIR, timeout=120)
+                    return jsonify({
+                        'success': True,
+                        'message': f'Planilla parcial ({new_rows} filas) aplicada como actualización sin borrar la base maestra ({old_rows} filas).',
+                        'target_file': target_name,
+                        'log': r.stdout[-300:] if r.stdout else r.stderr[-300:]
+                    }), 200
+            except Exception as e_chk:
+                print(f"-> Aviso al verificar filas de archivo subido: {e_chk}")
+            shutil.copyfile(dest_path, os.path.join(BASE_DIR, f"{os.path.splitext(target_name)[0]}_BACKUP.xlsx"))
+            os.replace(tmp_upload, dest_path)
+            print(f"-> Archivo maestro guardado con exito como: {target_name}")
+        else:
+            if os.path.exists(dest_path):
+                backup_path = os.path.join(BASE_DIR, f"{os.path.splitext(target_name)[0]}_BACKUP.xlsx")
+                try:
+                    shutil.copyfile(dest_path, backup_path)
+                except Exception:
+                    pass
+            file.save(dest_path)
+            print(f"-> Archivo guardado con exito como: {target_name}")
 
         # Ejecutar consolidación automática
         cmd = [sys.executable, os.path.join(BASE_DIR, 'actualizar_datos.py')]

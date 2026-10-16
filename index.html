@@ -3027,9 +3027,21 @@
                     localEdits = JSON.parse(saved);
                     // Sanitización y auto-reparación inteligente de ediciones guardadas localmente
                     let cleaned = false;
+                    const allBaseOrders = (window.CONGELADO_APP_DATA && window.CONGELADO_APP_DATA.activeShipments ? window.CONGELADO_APP_DATA.activeShipments : [])
+                        .concat(window.CONGELADO_APP_DATA && window.CONGELADO_APP_DATA.flowOrders ? window.CONGELADO_APP_DATA.flowOrders : []);
+
                     Object.keys(localEdits).forEach(pKey => {
                         const ed = localEdits[pKey];
                         if (!ed) return;
+
+                        const orig = allBaseOrders.find(x => String(x.pedido) === pKey);
+
+                        // 0. Reparar corrupción por colisión de cabecera 'N° BL NAVIERA' -> naviera
+                        if (orig && ed.naviera && orig.bl && String(ed.naviera).trim() === String(orig.bl).trim() && String(orig.naviera).trim() !== String(orig.bl).trim()) {
+                            delete localEdits[pKey];
+                            cleaned = true;
+                            return;
+                        }
 
                         // 1. Sanitizar analista inválido
                         if (ed.responsable) {
@@ -3046,8 +3058,6 @@
                             const nFac = Number(ed.factura);
                             const strFac = String(ed.factura);
                             if ((nFac >= 35000 && nFac <= 65000) || strFac.includes('-') || strFac.includes('/')) {
-                                const orig = (window.CONGELADO_APP_DATA && window.CONGELADO_APP_DATA.activeShipments) 
-                                    ? window.CONGELADO_APP_DATA.activeShipments.find(x => String(x.pedido) === pKey) : null;
                                 if (orig && orig.factura && !(Number(orig.factura) >= 35000 && Number(orig.factura) <= 65000)) {
                                     ed.factura = orig.factura;
                                     ed.doc_factura = orig.doc_factura || orig.factura;
@@ -3080,14 +3090,15 @@
                             }
                         }
 
-                        // 5. Sanitizar ediciones masivas procedentes de subida de base completa que ya coinciden con la base oficial
-                        const orig = (window.CONGELADO_APP_DATA && window.CONGELADO_APP_DATA.activeShipments) 
-                            ? window.CONGELADO_APP_DATA.activeShipments.find(x => String(x.pedido) === pKey) : null;
+                        // 5. Sanitizar ediciones masivas procedentes de subida que ya coinciden con la base oficial
                         if (orig) {
                             const isSameResp = !ed.responsable || ed.responsable === orig.responsable;
                             const isSameStatus = !ed.estatus || ed.estatus === orig.estatus;
                             const isSameFact = !ed.factura || ed.factura === orig.factura;
-                            if (isSameResp && isSameStatus && isSameFact) {
+                            const isSameDraft = !ed.draft_real || ed.draft_real === orig.draft_real;
+                            const isSameFin = !ed.finales_real || ed.finales_real === orig.finales_real;
+                            const isSameObs = !ed.observacion || ed.observacion === orig.observacion;
+                            if (isSameResp && isSameStatus && isSameFact && isSameDraft && isSameFin && isSameObs) {
                                 delete localEdits[pKey];
                                 cleaned = true;
                             }
@@ -7213,30 +7224,33 @@
                         if (kl.includes('pedido') || kl.includes('vbeln') || kl === 'order') colMap.pedido = k;
                         else if (kl.includes('responsable') || kl.includes('analista') || kl.includes('tramitador') || kl === 'resp') colMap.responsable = k;
                         else if (kl.includes('codigo cliente') || kl.includes('código cliente') || kl.includes('cod. cliente')) colMap.codigo_cliente = k;
+                        else if (kl.includes('destinatario') || kl.includes('consignee') || kl.includes('consignatario')) colMap.consignatario = k;
                         else if (kl.includes('solicitante') || kl.includes('cliente') || kl.includes('name1')) colMap.cliente = k;
                         else if (kl.includes('sociedad') || kl.includes('bukrs')) colMap.sociedad = k;
                         else if (kl.includes('contrato')) colMap.contrato = k;
                         else if (kl.includes('incoterm')) colMap.incoterm = k;
                         else if (kl.includes('condicion') || kl.includes('condición') || (kl.includes('pago') && !kl.includes('post'))) colMap.condicion_venta = k;
-                        else if (kl.includes('naviera') || kl.includes('transportista')) colMap.naviera = k;
+                        else if (kl === 'bl' || kl === 'n° bl' || kl === 'nro bl' || kl.includes('n° bl') || kl.includes('nro bl') || kl.includes('bill of lading') || kl.includes('conocimiento')) colMap.bl = k;
+                        else if ((kl.includes('naviera') || kl.includes('transportista')) && !kl.includes('bl')) colMap.naviera = k;
                         else if (kl.includes('nave') || kl.includes('buque') || kl.includes('vessel')) colMap.nave = k;
                         else if (kl.includes('reserva') || kl.includes('booking')) colMap.reserva = k;
-                        else if (kl === 'bl' || kl === 'n° bl' || kl === 'nro bl' || kl.includes('bill of lading') || kl.includes('conocimiento')) colMap.bl = k;
                         else if (kl.includes('contenedor') || kl.includes('container')) colMap.contenedor = k;
-                        else if (kl.includes('zarpe') || kl.includes('etd')) colMap.zarpe = k;
+                        else if ((kl.includes('zarpe') || kl.includes('etd')) && !kl.includes('mes')) colMap.zarpe = k;
                         else if (kl.includes('eta') || kl.includes('arribo')) colMap.eta = k;
                         else if (kl.includes('puerto') && (kl.includes('salida') || kl.includes('embarque') || kl.includes('origen') || kl.includes('pol'))) colMap.puerto_embarque = k;
                         else if (kl.includes('puerto') && (kl.includes('destino') || kl.includes('descarga') || kl.includes('pod'))) colMap.puerto_destino = k;
                         else if (kl.includes('puerto')) colMap.puerto = k;
                         else if (kl.includes('folio sap')) colMap.folio_sap = k;
-                        else if (kl.includes('fecha factur') || kl.includes('f. factur')) colMap.fecha_factura = k;
-                        else if ((kl.includes('folio') || kl.includes('factura') || kl.includes('doc.fac')) && !kl.includes('fecha') && !kl.startsWith('f.')) colMap.factura = k;
+                        else if (kl.includes('factura co')) colMap.fecha_factura_co = k;
+                        else if ((kl.includes('fecha factur') || kl.includes('f. factur')) && !kl.includes('co')) colMap.fecha_factura = k;
+                        else if ((kl.includes('folio') || kl.includes('factura') || kl.includes('doc.fac')) && !kl.includes('fecha') && !kl.startsWith('f.') && !kl.includes('autor')) colMap.factura = k;
+                        else if (kl.includes('instruccion') || kl.includes('instrucción')) colMap.instruccion_embarque = k;
+                        else if (kl.includes('aprobacion draft') || kl.includes('aprobación draft')) colMap.aprobacion_draft = k;
                         else if (kl.includes('draft') && kl.includes('real') && !kl.includes('esperado') && !kl.includes('plazo') && !kl.includes('estado')) colMap.draft_real = k;
                         else if (kl.includes('draft') && (kl.includes('envio') || kl.includes('envío')) && !kl.includes('esperado') && !kl.includes('plazo') && !kl.includes('estado')) {
                             if (!colMap.draft_real) colMap.draft_real = k;
                         }
-                        else if (kl.includes('co') && (kl.includes('aprob') || kl.includes('fecha') || kl.startsWith('f.'))) colMap.co_aprobado = k;
-                        else if (kl === 'f. co' || kl.includes('certificado')) colMap.co_aprobado = k;
+                        else if (kl.includes('co legalizado') || (kl.includes('co') && (kl.includes('aprob') || kl.includes('fecha') || kl.startsWith('f.')) && !kl.includes('factura')) || kl === 'f. co' || kl.includes('certificado')) colMap.co_aprobado = k;
                         else if (kl.includes('finales') && kl.includes('real') && !kl.includes('esperado') && !kl.includes('plazo') && !kl.includes('estado')) colMap.finales_real = k;
                         else if (kl.includes('finales') && (kl.includes('envio') || kl.includes('envío')) && !kl.includes('esperado') && !kl.includes('plazo') && !kl.includes('estado')) {
                             if (!colMap.finales_real) colMap.finales_real = k;
@@ -7344,116 +7358,93 @@
                             let changed = false;
                             const editObj = localEdits[pKey] || { pedido: pKey, ...existing };
 
+                            const normCompare = (val) => {
+                                if (val === undefined || val === null || val === '-') return '';
+                                const s = String(val).trim();
+                                if (s.toLowerCase() === 'no aplica') return 'no aplica';
+                                return s;
+                            };
+
+                            const setIfDiff = (field, newVal) => {
+                                if (!newVal) return false;
+                                if (normCompare(existing[field]) !== normCompare(newVal)) {
+                                    // Ignorar si la base tiene vacío y la planilla dice 'No aplica' por defecto en clientes sin DHL
+                                    if (!normCompare(existing[field]) && normCompare(newVal) === 'no aplica') return false;
+                                    existing[field] = newVal;
+                                    editObj[field] = newVal;
+                                    changed = true;
+                                    return true;
+                                }
+                                return false;
+                            };
+
                             if (newResp && newResp !== 'Sin Asignar') {
                                 if (existing.responsable !== newResp) {
                                     reassignedCount++;
                                     changed = true;
-                                }
-                                existing.responsable = newResp;
-                                editObj.responsable = newResp;
+                                    existing.responsable = newResp;
+                                    editObj.responsable = newResp;
 
-                                if (existing.autor_sap && existing.autor_sap.toLowerCase() !== newResp.toLowerCase() && existing.autor_sap !== 'Sin Factura') {
-                                    existing.metodo_asignacion = `Planilla Excel (${newResp}) [Apoyo facturación SAP: ${existing.autor_sap}]`;
-                                } else {
-                                    existing.metodo_asignacion = `Planilla Excel (${newResp})`;
+                                    if (existing.autor_sap && existing.autor_sap.toLowerCase() !== newResp.toLowerCase() && existing.autor_sap !== 'Sin Factura') {
+                                        existing.metodo_asignacion = `Planilla Excel (${newResp}) [Apoyo facturación SAP: ${existing.autor_sap}]`;
+                                    } else {
+                                        existing.metodo_asignacion = `Planilla Excel (${newResp})`;
+                                    }
+                                    editObj.metodo_asignacion = existing.metodo_asignacion;
                                 }
-                                editObj.metodo_asignacion = existing.metodo_asignacion;
                             }
 
                             // Cliente, Sociedad, Contrato, Incoterm
                             if (colMap.cliente && row[colMap.cliente]) {
                                 const vCli = cleanExcelVal(row[colMap.cliente]);
                                 if (vCli && (!existing.cliente || existing.cliente === '-')) {
-                                    existing.cliente = vCli; editObj.cliente = vCli; changed = true;
+                                    setIfDiff('cliente', vCli);
                                 }
                             }
-                            if (colMap.sociedad && row[colMap.sociedad]) {
-                                const vSoc = cleanExcelVal(row[colMap.sociedad]);
-                                if (vSoc) { existing.sociedad = vSoc; editObj.sociedad = vSoc; changed = true; }
-                            }
-                            if (colMap.contrato && row[colMap.contrato]) {
-                                const vCon = cleanExcelVal(row[colMap.contrato]);
-                                if (vCon) { existing.contrato = vCon; editObj.contrato = vCon; changed = true; }
-                            }
-                            if (colMap.incoterm && row[colMap.incoterm]) {
-                                const vInc = cleanExcelVal(row[colMap.incoterm]);
-                                if (vInc) { existing.incoterm = vInc; editObj.incoterm = vInc; changed = true; }
-                            }
+                            if (colMap.sociedad && row[colMap.sociedad]) setIfDiff('sociedad', cleanExcelVal(row[colMap.sociedad]));
+                            if (colMap.contrato && row[colMap.contrato]) setIfDiff('contrato', cleanExcelVal(row[colMap.contrato]));
+                            if (colMap.incoterm && row[colMap.incoterm]) setIfDiff('incoterm', cleanExcelVal(row[colMap.incoterm]));
 
                             // Naviera, Nave, Reserva / BL, Contenedor
-                            if (colMap.naviera && row[colMap.naviera]) {
-                                const vNav = cleanExcelVal(row[colMap.naviera]);
-                                if (vNav) { existing.naviera = vNav; editObj.naviera = vNav; changed = true; }
-                            }
-                            if (colMap.nave && row[colMap.nave]) {
-                                const vNave = cleanExcelVal(row[colMap.nave]);
-                                if (vNave) { existing.nave = vNave; editObj.nave = vNave; changed = true; }
-                            }
-                            if (colMap.bl && row[colMap.bl]) {
-                                const vBl = cleanExcelVal(row[colMap.bl]).replace(/\.0$/, '');
-                                if (vBl) { existing.bl = vBl; editObj.bl = vBl; changed = true; }
-                            }
+                            if (colMap.naviera && row[colMap.naviera]) setIfDiff('naviera', cleanExcelVal(row[colMap.naviera]));
+                            if (colMap.nave && row[colMap.nave]) setIfDiff('nave', cleanExcelVal(row[colMap.nave]));
+                            if (colMap.bl && row[colMap.bl]) setIfDiff('bl', cleanExcelVal(row[colMap.bl]).replace(/\.0$/, ''));
                             if (colMap.reserva && row[colMap.reserva]) {
                                 const vRes = cleanExcelVal(row[colMap.reserva]).replace(/\.0$/, '');
-                                if (vRes && (!existing.bl || existing.bl === '-')) {
-                                    existing.bl = vRes; editObj.bl = vRes; changed = true;
-                                }
+                                if (vRes && (!existing.bl || existing.bl === '-')) setIfDiff('bl', vRes);
                             }
-                            if (colMap.contenedor && row[colMap.contenedor]) {
-                                const vCnt = cleanExcelVal(row[colMap.contenedor]);
-                                if (vCnt) { existing.contenedor = vCnt; editObj.contenedor = vCnt; changed = true; }
-                            }
+                            if (colMap.contenedor && row[colMap.contenedor]) setIfDiff('contenedor', cleanExcelVal(row[colMap.contenedor]));
 
                             // Puertos
                             if (colMap.puerto_embarque && row[colMap.puerto_embarque]) {
                                 let vPol = cleanExcelVal(row[colMap.puerto_embarque]).replace(/,\s*puerto$/i, '').trim();
-                                if (vPol) { existing.puerto = vPol; existing.puerto_embarque = vPol; editObj.puerto = vPol; editObj.puerto_embarque = vPol; changed = true; }
+                                if (vPol && normCompare(existing.puerto || existing.puerto_embarque) !== normCompare(vPol)) {
+                                    existing.puerto = vPol; existing.puerto_embarque = vPol; editObj.puerto = vPol; editObj.puerto_embarque = vPol; changed = true;
+                                }
                             }
-                            if (colMap.puerto_destino && row[colMap.puerto_destino]) {
-                                const vPod = cleanExcelVal(row[colMap.puerto_destino]);
-                                if (vPod) { existing.puerto_destino = vPod; editObj.puerto_destino = vPod; changed = true; }
-                            }
-                            if (colMap.puerto && row[colMap.puerto]) {
+                            if (colMap.puerto_destino && row[colMap.puerto_destino]) setIfDiff('puerto_destino', cleanExcelVal(row[colMap.puerto_destino]));
+                            if (colMap.puerto && row[colMap.puerto] && !colMap.puerto_embarque) {
                                 let vPto = cleanExcelVal(row[colMap.puerto]).replace(/,\s*puerto$/i, '').trim();
-                                if (vPto) {
-                                    if (!colMap.puerto_embarque) { existing.puerto = vPto; existing.puerto_embarque = vPto; editObj.puerto = vPto; editObj.puerto_embarque = vPto; }
-                                    else { existing.puerto_destino = vPto; editObj.puerto_destino = vPto; }
-                                    changed = true;
+                                if (vPto && normCompare(existing.puerto) !== normCompare(vPto)) {
+                                    existing.puerto = vPto; existing.puerto_embarque = vPto; editObj.puerto = vPto; editObj.puerto_embarque = vPto; changed = true;
                                 }
                             }
 
                             // Zarpe y ETA
-                            if (colMap.zarpe && row[colMap.zarpe]) {
-                                const vZarpe = normalizeDateISO(row[colMap.zarpe]);
-                                if (vZarpe) { existing.zarpe = vZarpe; editObj.zarpe = vZarpe; changed = true; }
-                            }
-                            if (colMap.eta && row[colMap.eta]) {
-                                const vEta = normalizeDateISO(row[colMap.eta]);
-                                if (vEta) { existing.eta = vEta; editObj.eta = vEta; changed = true; }
-                            }
+                            if (colMap.zarpe && row[colMap.zarpe]) setIfDiff('zarpe', normalizeDateISO(row[colMap.zarpe]));
+                            if (colMap.eta && row[colMap.eta]) setIfDiff('eta', normalizeDateISO(row[colMap.eta]));
 
                             // Hitos documentales: Draft, CO, Finales, SWB / Post Venta
-                            if (colMap.draft_real && row[colMap.draft_real]) {
-                                const vDraft = normalizeDateISO(row[colMap.draft_real]);
-                                if (vDraft) { existing.draft_real = vDraft; editObj.draft_real = vDraft; changed = true; }
-                            }
-                            if (colMap.co_aprobado && row[colMap.co_aprobado]) {
-                                const vCo = normalizeDateISO(row[colMap.co_aprobado]);
-                                if (vCo) { existing.co_aprobado = vCo; editObj.co_aprobado = vCo; changed = true; }
-                            }
-                            if (colMap.finales_real && row[colMap.finales_real]) {
-                                const vFin = normalizeDateISO(row[colMap.finales_real]);
-                                if (vFin) { existing.finales_real = vFin; editObj.finales_real = vFin; changed = true; }
-                            }
-                            if (colMap.swb_liberacion && row[colMap.swb_liberacion]) {
-                                const vSwb = normalizeDateISO(row[colMap.swb_liberacion]);
-                                if (vSwb) { existing.swb_liberacion = vSwb; editObj.swb_liberacion = vSwb; changed = true; }
-                            }
+                            if (colMap.instruccion_embarque && row[colMap.instruccion_embarque]) setIfDiff('instruccion_embarque', normalizeDateISO(row[colMap.instruccion_embarque]));
+                            if (colMap.fecha_factura_co && row[colMap.fecha_factura_co]) setIfDiff('fecha_factura_co', normalizeDateISO(row[colMap.fecha_factura_co]));
+                            if (colMap.draft_real && row[colMap.draft_real]) setIfDiff('draft_real', normalizeDateISO(row[colMap.draft_real]));
+                            if (colMap.aprobacion_draft && row[colMap.aprobacion_draft]) setIfDiff('aprobacion_draft', normalizeDateISO(row[colMap.aprobacion_draft]));
+                            if (colMap.co_aprobado && row[colMap.co_aprobado]) setIfDiff('co_aprobado', normalizeDateISO(row[colMap.co_aprobado]));
+                            if (colMap.finales_real && row[colMap.finales_real]) setIfDiff('finales_real', normalizeDateISO(row[colMap.finales_real]));
+                            if (colMap.swb_liberacion && row[colMap.swb_liberacion]) setIfDiff('swb_liberacion', normalizeDateISO(row[colMap.swb_liberacion]));
                             if (colMap.post_venta && row[colMap.post_venta]) {
                                 const vPvDate = normalizeDateISO(row[colMap.post_venta]);
-                                if (vPvDate && (!existing.swb_liberacion || existing.swb_liberacion === '-')) {
-                                    existing.swb_liberacion = vPvDate; editObj.swb_liberacion = vPvDate; changed = true;
-                                }
+                                if (vPvDate && (!existing.swb_liberacion || existing.swb_liberacion === '-')) setIfDiff('swb_liberacion', vPvDate);
                             }
 
                             // Condición de pago
@@ -7461,34 +7452,35 @@
                                 colMap.condicion_venta ? row[colMap.condicion_venta] : '',
                                 colMap.post_venta ? row[colMap.post_venta] : ''
                             );
-                            if (normCond) {
-                                existing.condicion_venta = normCond;
-                                editObj.condicion_venta = normCond;
-                                changed = true;
-                            }
+                            if (normCond) setIfDiff('condicion_venta', normCond);
 
                             // Factura y Fecha Factura
                             if (colMap.factura && row[colMap.factura]) {
                                 const rawFac = cleanExcelVal(row[colMap.factura]).replace(/\.0$/, '');
                                 if (rawFac && !rawFac.includes('/')) {
                                     const vFac = rawFac.includes('-') ? rawFac : normalizeSapDoc(rawFac);
-                                    if (vFac) {
+                                    if (vFac && normCompare(existing.factura) !== normCompare(vFac)) {
                                         existing.factura = vFac;
-                                        existing.doc_factura = vFac;
                                         editObj.factura = vFac;
-                                        editObj.doc_factura = vFac;
+                                        if (!colMap.folio_sap && !existing.doc_factura) {
+                                            existing.doc_factura = vFac;
+                                            editObj.doc_factura = vFac;
+                                        }
                                         changed = true;
                                     }
                                 }
                             }
                             if (colMap.folio_sap && row[colMap.folio_sap]) {
                                 const rawFolio = cleanExcelVal(row[colMap.folio_sap]).replace(/\.0$/, '');
-                                if (rawFolio) { existing.folio_sap = rawFolio; editObj.folio_sap = rawFolio; changed = true; }
+                                if (rawFolio && normCompare(existing.doc_factura || existing.folio_sap) !== normCompare(rawFolio)) {
+                                    existing.folio_sap = rawFolio;
+                                    existing.doc_factura = rawFolio;
+                                    editObj.folio_sap = rawFolio;
+                                    editObj.doc_factura = rawFolio;
+                                    changed = true;
+                                }
                             }
-                            if (colMap.fecha_factura && row[colMap.fecha_factura]) {
-                                const vFFac = normalizeDateISO(row[colMap.fecha_factura]);
-                                if (vFFac) { existing.fecha_factura = vFFac; editObj.fecha_factura = vFFac; changed = true; }
-                            }
+                            if (colMap.fecha_factura && row[colMap.fecha_factura]) setIfDiff('fecha_factura', normalizeDateISO(row[colMap.fecha_factura]));
 
                             // DHL (Fecha y Guía)
                             const isDhlStatusText = (txt) => {
@@ -7500,16 +7492,10 @@
                                 if (rawFDhl) {
                                     const rl = rawFDhl.toLowerCase();
                                     if (rl === 'no aplica' || rl === 'na' || rl === 'n/a' || rl.includes('no requier')) {
-                                        existing.fecha_dhl = 'No aplica';
-                                        editObj.fecha_dhl = 'No aplica';
-                                        changed = true;
+                                        setIfDiff('fecha_dhl', 'No aplica');
                                     } else if (!isDhlStatusText(rawFDhl)) {
                                         const vFDhl = normalizeDateISO(rawFDhl);
-                                        if (vFDhl) {
-                                            existing.fecha_dhl = vFDhl;
-                                            editObj.fecha_dhl = vFDhl;
-                                            changed = true;
-                                        }
+                                        if (vFDhl) setIfDiff('fecha_dhl', vFDhl);
                                     }
                                 }
                             }
@@ -7518,19 +7504,13 @@
                                 if (rawGuia) {
                                     const rl = rawGuia.toLowerCase();
                                     if (rl === 'no aplica' || rl === 'na' || rl === 'n/a') {
-                                        existing.nro_dhl = 'No aplica';
-                                        editObj.nro_dhl = 'No aplica';
-                                        changed = true;
+                                        setIfDiff('nro_dhl', 'No aplica');
                                     } else if (!isDhlStatusText(rawGuia)) {
                                         const vFDhl = normalizeDateISO(rawGuia);
                                         if (vFDhl && Number(rawGuia) >= 35000 && Number(rawGuia) <= 75000) {
-                                            existing.fecha_dhl = vFDhl;
-                                            editObj.fecha_dhl = vFDhl;
-                                            changed = true;
+                                            setIfDiff('fecha_dhl', vFDhl);
                                         } else {
-                                            existing.nro_dhl = rawGuia;
-                                            editObj.nro_dhl = rawGuia;
-                                            changed = true;
+                                            setIfDiff('nro_dhl', rawGuia);
                                         }
                                     }
                                 }
@@ -7540,111 +7520,98 @@
                                 if (rawGen) {
                                     const rl = rawGen.toLowerCase();
                                     if (rl === 'no aplica' || rl === 'na' || rl === 'n/a' || rl.includes('no requier')) {
-                                        existing.fecha_dhl = 'No aplica';
-                                        existing.nro_dhl = 'No aplica';
-                                        editObj.fecha_dhl = 'No aplica';
-                                        editObj.nro_dhl = 'No aplica';
-                                        changed = true;
+                                        setIfDiff('fecha_dhl', 'No aplica');
+                                        setIfDiff('nro_dhl', 'No aplica');
                                     } else if (!isDhlStatusText(rawGen)) {
                                         const dIso = normalizeDateISO(rawGen);
-                                        if (dIso) {
-                                            existing.fecha_dhl = dIso;
-                                            editObj.fecha_dhl = dIso;
-                                            changed = true;
-                                        } else {
-                                            existing.nro_dhl = rawGen;
-                                            editObj.nro_dhl = rawGen;
-                                            changed = true;
-                                        }
+                                        if (dIso) setIfDiff('fecha_dhl', dIso);
+                                        else setIfDiff('nro_dhl', rawGen);
                                     }
                                 }
                             }
-                            if (colMap.observacion && row[colMap.observacion]) {
-                                const vObs = cleanExcelVal(row[colMap.observacion]);
-                                if (vObs) { existing.observacion = vObs; editObj.observacion = vObs; changed = true; }
-                            }
+                            if (colMap.observacion && row[colMap.observacion]) setIfDiff('observacion', cleanExcelVal(row[colMap.observacion]));
 
-                            // Recalcular plazos y estados de Draft (4d hábiles) y Finales (15d hábiles)
-                            if (existing.zarpe) {
-                                existing.draft_esperado = addBusinessDays(existing.zarpe, 4);
-                                existing.finales_esperado = addBusinessDays(existing.zarpe, 15);
-                                editObj.draft_esperado = existing.draft_esperado;
-                                editObj.finales_esperado = existing.finales_esperado;
+                            // Solo recalcular plazos y estatus si hubo una modificación real en este pedido
+                            if (changed) {
+                                if (existing.zarpe) {
+                                    existing.draft_esperado = addBusinessDays(existing.zarpe, 4);
+                                    existing.finales_esperado = addBusinessDays(existing.zarpe, 15);
+                                    editObj.draft_esperado = existing.draft_esperado;
+                                    editObj.finales_esperado = existing.finales_esperado;
 
-                                if (existing.draft_real && existing.draft_real !== '-') {
-                                    const diffD = getBusinessDaysDiff(existing.draft_esperado, existing.draft_real);
-                                    existing.dias_atraso_draft = diffD;
-                                    existing.estado_draft = diffD > 0 ? 'ATRASADO' : 'EN PLAZO';
-                                } else {
-                                    const diffD = getBusinessDaysDiff(existing.draft_esperado, todayIso);
-                                    existing.dias_atraso_draft = Math.max(0, diffD);
-                                    existing.estado_draft = diffD > 0 ? 'ATRASADO' : 'PENDIENTE';
+                                    if (existing.draft_real && existing.draft_real !== '-') {
+                                        const diffD = getBusinessDaysDiff(existing.draft_esperado, existing.draft_real);
+                                        existing.dias_atraso_draft = diffD;
+                                        existing.estado_draft = diffD > 0 ? 'ATRASADO' : 'EN PLAZO';
+                                    } else {
+                                        const diffD = getBusinessDaysDiff(existing.draft_esperado, todayIso);
+                                        existing.dias_atraso_draft = Math.max(0, diffD);
+                                        existing.estado_draft = diffD > 0 ? 'ATRASADO' : 'PENDIENTE';
+                                    }
+
+                                    if (existing.finales_real && existing.finales_real !== '-') {
+                                        const diffF = getBusinessDaysDiff(existing.finales_esperado, existing.finales_real);
+                                        existing.dias_atraso_finales = diffF;
+                                        existing.estado_finales = diffF > 0 ? 'ATRASADO' : 'EN PLAZO';
+                                    } else {
+                                        const diffF = getBusinessDaysDiff(existing.finales_esperado, todayIso);
+                                        existing.dias_atraso_finales = Math.max(0, diffF);
+                                        existing.estado_finales = diffF > 0 ? 'ATRASADO' : 'PENDIENTE';
+                                    }
+                                    editObj.dias_atraso_draft = existing.dias_atraso_draft;
+                                    editObj.estado_draft = existing.estado_draft;
+                                    editObj.dias_atraso_finales = existing.dias_atraso_finales;
+                                    editObj.estado_finales = existing.estado_finales;
                                 }
 
-                                if (existing.finales_real && existing.finales_real !== '-') {
-                                    const diffF = getBusinessDaysDiff(existing.finales_esperado, existing.finales_real);
-                                    existing.dias_atraso_finales = diffF;
-                                    existing.estado_finales = diffF > 0 ? 'ATRASADO' : 'EN PLAZO';
-                                } else {
-                                    const diffF = getBusinessDaysDiff(existing.finales_esperado, todayIso);
-                                    existing.dias_atraso_finales = Math.max(0, diffF);
-                                    existing.estado_finales = diffF > 0 ? 'ATRASADO' : 'PENDIENTE';
-                                }
-                                editObj.dias_atraso_draft = existing.dias_atraso_draft;
-                                editObj.estado_draft = existing.estado_draft;
-                                editObj.dias_atraso_finales = existing.dias_atraso_finales;
-                                editObj.estado_finales = existing.estado_finales;
-                            }
+                                // Re-evaluar estatus operativo general
+                                const cRule = getCustomerRule(existing.cliente, existing.codigo_cliente);
+                                const isIntercomp = (cRule && cRule.categoria === 'Intercompany') ||
+                                    (existing.cliente && (existing.cliente.toUpperCase().includes('ANDES ASIA') || existing.cliente.toUpperCase().includes('AQUACHILE INC')));
 
-                            // Re-evaluar estatus operativo general
-                            const cRule = getCustomerRule(existing.cliente, existing.codigo_cliente);
-                            const isIntercomp = (cRule && cRule.categoria === 'Intercompany') ||
-                                (existing.cliente && (existing.cliente.toUpperCase().includes('ANDES ASIA') || existing.cliente.toUpperCase().includes('AQUACHILE INC')));
-
-                            if (isIntercomp) {
-                                existing.categoria_cliente = 'Intercompany';
-                                if (!existing.formato_liberacion) existing.formato_liberacion = (cRule ? cRule.formato_liberacion : 'SWB');
-                                if ((existing.co_aprobado && existing.co_aprobado !== '-') || (existing.swb_liberacion && existing.swb_liberacion !== '-')) {
-                                    existing.estatus = 'Finalizado';
-                                } else if (existing.draft_real && existing.draft_real !== '-') {
-                                    existing.estatus = 'Finales en Trámite';
-                                } else {
-                                    existing.estatus = 'Solicitando CO';
-                                }
-                            } else {
-                                const isAnticipo = (existing.condicion_venta || '').toLowerCase().includes('anticip');
-                                const hasRel = Boolean(existing.swb_liberacion && existing.swb_liberacion !== '-');
-                                const hasFDhl = Boolean(existing.fecha_dhl && existing.fecha_dhl !== '-' && existing.fecha_dhl.toLowerCase() !== 'no aplica');
-                                const isDhlNa = (existing.fecha_dhl === 'No aplica' || existing.nro_dhl === 'No aplica');
-                                const hasGui = Boolean(existing.nro_dhl && existing.nro_dhl !== '-' && existing.nro_dhl !== 'No aplica');
-
-                                if (isAnticipo) {
-                                    if (hasRel && (hasFDhl || isDhlNa || hasGui)) {
+                                if (isIntercomp) {
+                                    existing.categoria_cliente = 'Intercompany';
+                                    if (!existing.formato_liberacion) existing.formato_liberacion = (cRule ? cRule.formato_liberacion : 'SWB');
+                                    if ((existing.co_aprobado && existing.co_aprobado !== '-') || (existing.swb_liberacion && existing.swb_liberacion !== '-')) {
                                         existing.estatus = 'Finalizado';
-                                    } else if (existing.finales_real && existing.finales_real !== '-') {
-                                        existing.estatus = 'Pendiente Liberación / Pago';
                                     } else if (existing.draft_real && existing.draft_real !== '-') {
                                         existing.estatus = 'Finales en Trámite';
                                     } else {
                                         existing.estatus = 'Solicitando CO';
                                     }
-                                } else if (existing.finales_real && existing.finales_real !== '-' && (hasFDhl || isDhlNa || hasRel || hasGui)) {
-                                    existing.estatus = 'Finalizado';
-                                } else if (existing.draft_real && existing.draft_real !== '-' && existing.finales_real && existing.finales_real !== '-') {
-                                    existing.estatus = 'Finalizado';
-                                } else if (existing.draft_real && existing.draft_real !== '-' && (!existing.finales_real || existing.finales_real === '-')) {
-                                    existing.estatus = 'Finales en Trámite';
                                 } else {
-                                    existing.estatus = 'Solicitando CO';
-                                }
-                            }
-                            if (existing.factura && existing.factura !== '-') {
-                                existing.estado_bl = 'BL RECIBIDO / FACTURADO';
-                            }
-                            editObj.estatus = existing.estatus;
-                            editObj.estado_bl = existing.estado_bl;
+                                    const isAnticipo = (existing.condicion_venta || '').toLowerCase().includes('anticip');
+                                    const hasRel = Boolean(existing.swb_liberacion && existing.swb_liberacion !== '-');
+                                    const hasFDhl = Boolean(existing.fecha_dhl && existing.fecha_dhl !== '-' && existing.fecha_dhl.toLowerCase() !== 'no aplica');
+                                    const isDhlNa = (existing.fecha_dhl === 'No aplica' || existing.nro_dhl === 'No aplica');
+                                    const hasGui = Boolean(existing.nro_dhl && existing.nro_dhl !== '-' && existing.nro_dhl !== 'No aplica');
 
-                            if (changed) {
+                                    if (isAnticipo) {
+                                        if (hasRel && (hasFDhl || isDhlNa || hasGui)) {
+                                            existing.estatus = 'Finalizado';
+                                        } else if (existing.finales_real && existing.finales_real !== '-') {
+                                            existing.estatus = 'Pendiente Liberación / Pago';
+                                        } else if (existing.draft_real && existing.draft_real !== '-') {
+                                            existing.estatus = 'Finales en Trámite';
+                                        } else {
+                                            existing.estatus = 'Solicitando CO';
+                                        }
+                                    } else if (existing.finales_real && existing.finales_real !== '-' && (hasFDhl || isDhlNa || hasRel || hasGui)) {
+                                        existing.estatus = 'Finalizado';
+                                    } else if (existing.draft_real && existing.draft_real !== '-' && existing.finales_real && existing.finales_real !== '-') {
+                                        existing.estatus = 'Finalizado';
+                                    } else if (existing.draft_real && existing.draft_real !== '-' && (!existing.finales_real || existing.finales_real === '-')) {
+                                        existing.estatus = 'Finales en Trámite';
+                                    } else {
+                                        existing.estatus = 'Solicitando CO';
+                                    }
+                                }
+                                if (existing.factura && existing.factura !== '-') {
+                                    existing.estado_bl = 'BL RECIBIDO / FACTURADO';
+                                }
+                                editObj.estatus = existing.estatus;
+                                editObj.estado_bl = existing.estado_bl;
+
                                 existing._isLocallyEdited = true;
                                 localEdits[pKey] = editObj;
                                 updatedCount++;
@@ -7697,7 +7664,7 @@
                                     zarpe: vZarpe,
                                     eta: colMap.eta ? normalizeDateISO(row[colMap.eta]) : '',
                                     factura: colMap.factura ? cleanExcelVal(row[colMap.factura]).replace(/\.0$/, '') : '',
-                                    doc_factura: colMap.factura ? cleanExcelVal(row[colMap.factura]).replace(/\.0$/, '') : '',
+                                    doc_factura: colMap.folio_sap ? cleanExcelVal(row[colMap.folio_sap]).replace(/\.0$/, '') : (colMap.factura ? cleanExcelVal(row[colMap.factura]).replace(/\.0$/, '') : ''),
                                     fecha_factura: colMap.fecha_factura ? normalizeDateISO(row[colMap.fecha_factura]) : '',
                                     draft_esperado: draftEsp,
                                     draft_real: vDraft,
@@ -7746,13 +7713,15 @@
                     if (chartRespInstance) updateCharts();
                     closeDropzone();
 
-                    let msg = `✅ Planilla sincronizada en vivo: ${processedRowsCount} filas leídas (${updatedCount} pedidos actualizados`;
+                    let msg = `✅ Planilla sincronizada en vivo: ${processedRowsCount} filas leídas (${updatedCount} pedidos modificados`;
                     if (newOrdersCount > 0) msg += `, ${newOrdersCount} nuevos`;
                     if (reassignedCount > 0) msg += `, ${reassignedCount} reasignados`;
                     msg += `).`;
                     showToast(msg);
 
-                    uploadFileToBackend(file, 'congelado', rows.length, updatedCount, newOrdersCount);
+                    if (rows.length >= 500) {
+                        uploadFileToBackend(file, 'congelado', rows.length, updatedCount, newOrdersCount);
+                    }
                 } catch(err) {
                     console.error("Error al procesar archivo Excel:", err);
                     alert("Error al procesar el archivo Excel: " + err.message);
