@@ -103,15 +103,39 @@ def parse_comex_date(val):
     if val is None or pd.isna(val):
         return None
     if isinstance(val, (datetime.datetime, datetime.date)):
-        return val.date() if isinstance(val, datetime.datetime) else val
+        dt = val.date() if isinstance(val, datetime.datetime) else val
+        if dt.year <= 1905:
+            return None
+        if dt.year in (2029, 3026, 3036):
+            dt = dt.replace(year=2026)
+        return dt
     val_str = str(val).strip()
     if not val_str or val_str.lower() in ('none', 'nan', '#n/a', '#ref!', '01-01-1900', '1900-01-01', '00:00:00', 'no facturado'):
         return None
     for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%Y/%m/%d', '%Y-%m-%d %H:%M:%S', '%d-%m-%Y %H:%M:%S'):
         try:
-            return datetime.datetime.strptime(val_str[:10], fmt[:8] if len(val_str) == 8 else fmt).date()
+            dt = datetime.datetime.strptime(val_str[:10], fmt[:8] if len(val_str) == 8 else fmt).date()
+            if dt.year <= 1905:
+                return None
+            if dt.year in (2029, 3026, 3036):
+                dt = dt.replace(year=2026)
+            return dt
         except Exception:
             pass
+    # Buscar fecha embebida en texto (ej: 'SWB 30-09-2026' o '2026-09-30')
+    m_emb = re.search(r'\b(\d{2}[-/]\d{2}[-/]\d{4}|\d{4}[-/]\d{2}[-/]\d{2})\b', val_str)
+    if m_emb:
+        sub = m_emb.group(1)
+        for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%Y/%m/%d'):
+            try:
+                dt = datetime.datetime.strptime(sub, fmt).date()
+                if dt.year <= 1905:
+                    return None
+                if dt.year in (2029, 3026, 3036):
+                    dt = dt.replace(year=2026)
+                return dt
+            except Exception:
+                pass
     try:
         num = float(val_str)
         if 35000 < num < 60000:
@@ -236,7 +260,7 @@ def evaluate_order_milestones(zarpe, draft_r, fin_r, fac, bl, dhl=None, swb=None
     if c_rule and c_rule.get('requiere_dhl') is False:
         nro_dhl = "No aplica"
         fecha_dhl = "No Aplica"
-    elif dhl_up in ('NA', 'N/A') or any(k in dhl_up for k in ('NO REQUIER', 'NO REPARTE', 'NO APLICA', 'NOAPLICA', 'CLIENTE RETIRA', 'NO DHL', 'SIN DHL', 'NO SE ENVIA')):
+    elif dhl_up in ('NA', 'N/A', 'ANULADO') or any(k in dhl_up for k in ('NO REQUIER', 'NO REPARTE', 'NO APLICA', 'NOAPLICA', 'CLIENTE RETIRA', 'NO DHL', 'SIN DHL', 'NO SE ENVIA')):
         nro_dhl = "No aplica"
         fecha_dhl = "No Aplica"
     elif dhl_raw:
@@ -244,6 +268,11 @@ def evaluate_order_milestones(zarpe, draft_r, fin_r, fac, bl, dhl=None, swb=None
         if f_dhl_dt:
             nro_dhl = str(nro_dhl_explicit or '').strip()
             fecha_dhl = f_dhl_dt.strftime('%Y-%m-%d')
+        elif any(k in dhl_up for k in ('PENDIENTE', 'ESPERANDO', 'CONFIRMACI', 'PAGO', 'RELEASE', 'POR DEFINIR', '-')):
+            nro_dhl = str(nro_dhl_explicit or '').strip()
+            if any(k in nro_dhl.upper() for k in ('PENDIENTE', 'ESPERANDO', 'CONFIRMACI', 'PAGO', 'RELEASE')):
+                nro_dhl = ""
+            fecha_dhl = ""
         else:
             nro_dhl = dhl_raw
             fecha_dhl = ""
@@ -715,25 +744,28 @@ def main():
         if 'RESPONSABLE' in h_val: header_col['resp'] = c
         elif 'SOLICITANTE' in h_val or 'CLIENTE' in h_val: header_col['cli'] = c
         elif 'PEDIDO' in h_val: header_col['ped'] = c
-        elif 'NAVE' in h_val: header_col['nave'] = c
-        elif 'ZARPE' in h_val or 'P44' in h_val: header_col['zarpe'] = c
+        elif 'NAVE' in h_val and 'NAVIERA' not in h_val: header_col['nave'] = c
+        elif 'ZARPE' in h_val or 'P44' in h_val or h_val == 'ETD': header_col['zarpe'] = c
         elif 'ETA' in h_val: header_col['eta'] = c
-        elif 'PUERTO' in h_val: header_col['puerto'] = c
-        elif 'FOLIO FACTURA' in h_val or h_val == 'FACTURA': header_col['fac'] = c
+        elif 'PUERTO' in h_val and 'DESTINO' not in h_val: header_col['puerto'] = c
+        elif 'RESERVA' in h_val or 'BOOKING' in h_val or 'N° BL' in h_val: header_col['reserva'] = c
+        elif 'FOLIO FACTURA' in h_val or h_val == 'FACTURA' or 'FACTURA (FOLIO' in h_val: header_col['fac'] = c
         elif 'FECHA FACTURA' in h_val or 'F. FACTURA' in h_val: header_col['f_fac'] = c
         elif 'REAL' in h_val and 'DRAFT' in h_val: header_col['draft_r'] = c
-        elif 'ESPERADO' in h_val and 'DRAFT' in h_val: header_col['draft_e'] = c
         elif 'PLAZO' in h_val and 'DRAFT' in h_val: header_col['draft_p'] = c
-        elif 'CERTIFICADO' in h_val: header_col['cert'] = c
+        elif 'ESPERADO' in h_val and 'DRAFT' in h_val: header_col['draft_e'] = c
+        elif 'CERTIFICADO' in h_val or 'CO LEGALIZADO' in h_val or 'CO APROBADO' in h_val: header_col['cert'] = c
         elif 'FINALES' in h_val and ('MÁX' in h_val or 'MAX' in h_val or 'REAL' in h_val): header_col['fin_r'] = c
-        elif 'FINALES' in h_val and 'ESPERADO' in h_val: header_col['fin_e'] = c
+        elif 'FINALES' in h_val and ('ESPERADO' in h_val or 'PLAZO' in h_val): header_col['fin_e'] = c
         elif 'POST VENTA' in h_val or 'MACA' in h_val: header_col['pv'] = c
         elif 'F. DHL' in h_val or 'FECHA DHL' in h_val or 'F.DHL' in h_val: header_col['f_dhl'] = c
         elif 'GUIA DHL' in h_val or 'GUÍA DHL' in h_val or 'NRO DHL' in h_val or 'N° DHL' in h_val: header_col['nro_dhl'] = c
         elif 'DHL' in h_val: header_col['dhl'] = c
         elif 'SWB' in h_val or 'RELEASE' in h_val: header_col['swb'] = c
-        elif 'CONDICION' in h_val or 'CONDICIÓN' in h_val or 'VENTA' in h_val: header_col['condicion'] = c
+        elif 'CONDICION' in h_val or 'CONDICIÓN' in h_val or 'VENTA' in h_val or 'PAGO' in h_val: header_col['condicion'] = c
         elif 'OBSERVACI' in h_val: header_col['obs'] = c
+
+    active_by_ped = {}
 
     for r in range(2, ws_cc.max_row + 1):
         resp = ws_cc.cell(row=r, column=header_col.get('resp', 1)).value
@@ -743,6 +775,7 @@ def main():
         zarpe = ws_cc.cell(row=r, column=header_col.get('zarpe', 5)).value
         eta = ws_cc.cell(row=r, column=header_col.get('eta', 6)).value
         puerto = ws_cc.cell(row=r, column=header_col.get('puerto', 7)).value
+        reserva_val = ws_cc.cell(row=r, column=header_col['reserva']).value if 'reserva' in header_col else None
         fac = ws_cc.cell(row=r, column=header_col.get('fac', 8)).value
         f_fac = ws_cc.cell(row=r, column=header_col['f_fac']).value if 'f_fac' in header_col else None
         draft_r = ws_cc.cell(row=r, column=header_col.get('draft_r', 10)).value
@@ -757,7 +790,11 @@ def main():
         obs = ws_cc.cell(row=r, column=header_col.get('obs', 18)).value
         
         if ped or resp:
-            ped_str = str(ped).strip().lstrip('0')
+            ped_str = str(ped or '').strip().lstrip('0')
+            if ped_str.endswith('.0'):
+                ped_str = ped_str[:-2]
+            if not ped_str or ped_str.lower() in ('none', 'nan'):
+                continue
             fac_str = normalize_sap_doc(fac)
 
             # REGLA DE EXCLUSION FRESCO: Si la factura fue emitida por el equipo Fresco, omitir
@@ -783,14 +820,23 @@ def main():
             if z_dt and z_dt < datetime.date(2026, 6, 1):
                 continue
 
-            # Condición de Venta (Crédito, Anticipo, etc.)
+            # Condición de Venta (Crédito, Anticipo, Carta de Crédito, etc.)
             cond_venta = ''
             if 'condicion' in header_col:
                 c_cell = ws_cc.cell(row=r, column=header_col['condicion']).value
                 if c_cell:
-                    cond_venta = str(c_cell).strip()
+                    c_str = str(c_cell).strip()
+                    if c_str.lower() not in ('nan', 'none', 'null', '-', '#ref!', '#n/a', '#value!', '#valor!') and not c_str.startswith('='):
+                        cond_venta = c_str
             if not cond_venta:
-                if cert and 'cred' in str(cert).strip().lower():
+                pv_low = str(pv or '').strip().lower()
+                if 'carta' in pv_low and 'cred' in pv_low:
+                    cond_venta = 'Carta de Crédito'
+                elif 'cred' in pv_low or 'créd' in pv_low:
+                    cond_venta = 'Crédito'
+                elif 'transf' in pv_low or 'anticip' in pv_low or 'esperando pago' in pv_low:
+                    cond_venta = 'Anticipo'
+                elif cert and 'cred' in str(cert).strip().lower():
                     cond_venta = 'Crédito'
                 elif swb and 'cred' in str(swb).strip().lower():
                     cond_venta = 'Crédito'
@@ -798,6 +844,16 @@ def main():
                     cond_venta = 'Anticipo'
                 elif obs and 'cred' in str(obs).strip().lower():
                     cond_venta = 'Crédito'
+
+            cv_low = cond_venta.lower()
+            if 'cta cte' in cv_low or 'cred.directo' in cv_low or 'crédito' in cv_low or 'credito' in cv_low:
+                cond_venta = 'Carta de Crédito' if 'carta' in cv_low else 'Crédito'
+            elif 'pago antic' in cv_low or 'anticipo' in cv_low or 'copia doc' in cv_low or 'transferencia' in cv_low:
+                cond_venta = 'Anticipo'
+            elif ('carta' in cv_low and 'cred' in cv_low) or cv_low in ('lc', 'l/c'):
+                cond_venta = 'Carta de Crédito'
+            elif cv_low == 'cod':
+                cond_venta = 'Contado'
 
             # Limpieza y estandarización de fechas y textos
             eta_dt = parse_comex_date(eta)
@@ -811,12 +867,12 @@ def main():
             else:
                 cert_val = ''
 
-            # SWB / Release: Si es fecha, guardar ISO. Si es texto (ej: "cliente interno", "OBL"), deducir formato y limpiar fecha
-            swb_dt = parse_comex_date(swb)
+            # SWB / Release: Si es fecha en SWB o en Post Venta (Maca), guardar ISO
+            swb_dt = parse_comex_date(swb) or parse_comex_date(pv)
             swb_val = swb_dt.strftime('%Y-%m-%d') if swb_dt else ''
 
             fmt_from_excel = None
-            if swb and not swb_dt:
+            if swb and not parse_comex_date(swb):
                 s_low = str(swb).lower()
                 if 'telex' in s_low:
                     fmt_from_excel = 'Telex Release'
@@ -826,9 +882,53 @@ def main():
                     fmt_from_excel = 'OBL'
                 elif 'destino' in s_low:
                     fmt_from_excel = 'Liberación en Destino'
+            if not fmt_from_excel and obs:
+                o_low = str(obs).lower()
+                if 'telex' in o_low:
+                    fmt_from_excel = 'Telex Release'
+                elif 'swb' in o_low:
+                    fmt_from_excel = 'SWB'
+                elif 'obl' in o_low:
+                    fmt_from_excel = 'OBL'
+                elif 'emisión en destino' in o_low or 'emision en destino' in o_low:
+                    fmt_from_excel = 'Liberación en Destino'
+
+            reserva_str = str(reserva_val or '').strip()
+            if reserva_str.endswith('.0'):
+                reserva_str = reserva_str[:-2]
+            if reserva_str.lower() in ('none', 'nan', 'null', '-', 's/d', '0', '#ref!', '#n/a'):
+                reserva_str = ''
+
+            nave_clean = re.sub(r'\s+', ' ', str(nave or '').strip())
+            puerto_clean = re.sub(r',\s*puerto$', '', str(puerto or '').strip(), flags=re.IGNORECASE).strip()
+            if puerto_clean.lower() == 'san vicente':
+                puerto_clean = 'San Vicente'
+            elif puerto_clean.lower() in ('lirquen', 'lirquén'):
+                puerto_clean = 'Lirquén'
+            elif puerto_clean.lower() == 'coronel':
+                puerto_clean = 'Coronel'
+            elif puerto_clean.lower() == 'san antonio':
+                puerto_clean = 'San Antonio'
+
+            # Inferir naviera inicial desde nave o reserva (luego enriquecida por SQL)
+            naviera_init = ''
+            nv_up = nave_clean.upper()
+            rs_up = reserva_str.upper()
+            if 'MSC' in nv_up or rs_up.startswith('EBKG') or rs_up.startswith('070SA'):
+                naviera_init = 'MSC'
+            elif 'ONE ' in nv_up or rs_up.startswith('SCLA') or rs_up.startswith('SCLG'):
+                naviera_init = 'ONE'
+            elif rs_up.startswith('SNG') or 'CMA' in nv_up:
+                naviera_init = 'CMA CGM'
+            elif rs_up.startswith('646') or 'COSCO' in nv_up:
+                naviera_init = 'COSCO'
+            elif 'POLAR' in nv_up or 'MAERSK' in nv_up or (rs_up.isdigit() and len(rs_up) == 9 and rs_up.startswith('27')):
+                naviera_init = 'MAERSK'
+            elif 'EXPRESS' in nv_up or rs_up.startswith('HLCU'):
+                naviera_init = 'HAPAG-LLOYD'
 
             # Evaluación precisa de hitos operativos (48h BL naviera, 4d hábiles draft, 15d finales, DHL, Estatus y Reglas de Cliente)
-            m = evaluate_order_milestones(zarpe, draft_r, fin_r, fac_str, None, dhl=dhl_cell, swb=swb_val, fin_e=fin_e, today_dt=today_dt, holidays=feriados_set, condicion_venta=cond_venta, nro_dhl_explicit=guia_cell, cli=cli, co_aprobado=cert_val, formato_liberacion=fmt_from_excel)
+            m = evaluate_order_milestones(zarpe, draft_r, fin_r, fac_str, reserva_str or None, dhl=dhl_cell, swb=swb_val or swb, fin_e=fin_e, today_dt=today_dt, holidays=feriados_set, condicion_venta=cond_venta, nro_dhl_explicit=guia_cell, cli=cli, co_aprobado=cert_val, formato_liberacion=fmt_from_excel)
                 
             author_code = factura_author.get(fac_str, '')
             author_sap_name = EQUIPOS_AUTORES.get(author_code, {}).get('analista', author_code)
@@ -843,7 +943,7 @@ def main():
 
             final_swb = m["swb_liberacion"]
 
-            active_shipments.append({
+            ship_obj = {
                 "id": r - 1,
                 "tipo": "Activo",
                 "estatus": m["estatus"],
@@ -855,10 +955,12 @@ def main():
                 "cliente": clean_client_name(cli),
                 "categoria_cliente": m["categoria_cliente"],
                 "formato_liberacion": m["formato_liberacion"],
-                "nave": str(nave or '').strip(),
+                "naviera": naviera_init,
+                "bl": reserva_str,
+                "nave": nave_clean,
                 "zarpe": m["zarpe"],
                 "eta": eta_fmt,
-                "puerto": str(puerto or '').strip(),
+                "puerto": puerto_clean,
                 "condicion_venta": cond_venta,
                 "factura": fac_str,
                 "doc_factura": fac_str,
@@ -886,7 +988,13 @@ def main():
                 "estado_finales": m["estado_finales"],
                 "dias_atraso_draft": m["dias_atraso_draft"],
                 "dias_atraso_finales": m["dias_atraso_finales"]
-            })
+            }
+            if ped_str in active_by_ped:
+                active_Ship_idx = active_by_ped[ped_str]
+                active_shipments[active_Ship_idx] = ship_obj
+            else:
+                active_by_ped[ped_str] = len(active_shipments)
+                active_shipments.append(ship_obj)
 
     print(f"   [OK] {len(active_shipments)} despachos activos de Congelado conservados ({activos_fresco_omitidos} omitidos por ser de Fresco).")
 
